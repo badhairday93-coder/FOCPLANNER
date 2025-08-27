@@ -1,10 +1,10 @@
 {
-  "name": "FOV Planner",
-  "short_name": "FOVPlanner",
+  "name": "FOCPlanner",
+  "short_name": "FOCPlanner",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#000000",
-  "theme_color": "#0a0a0a",
+  "theme_color": "#0f3d3d",
   "icons": [
     {
       "src": "icon-192.png",
