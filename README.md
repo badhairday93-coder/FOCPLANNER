@@ -1,6 +1,6 @@
 # FOCPLANNER
 This is a simple web app for planning astrophotography field of view (FOV) with the ASI2600MC Duo camera and guide sensor. It uses the DSS2Color survey as background sky images.
-🌐 Live Demo: https://badhairday93-coder.github.io/fov-planner/
+🌐 Live Demo: (https://badhairday93-coder.github.io/FOCPLANNER/)
 ✨ Features
 Enter or select astronomical objects (Messier, NGC, IC, etc.) to automatically set RA/Dec.
 Adjust RA and Dec manually by hours, minutes, and seconds.
