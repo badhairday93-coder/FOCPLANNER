@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0f3d3d">
   <meta charset="UTF-8" />
   <title>ASI2600MC Duo – DSS2 Red/Color FOV Planner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -21,8 +19,30 @@
     .btn:hover{background:#121a24}
     .pill{display:inline-block;font-size:11px;color:#cbd5e1;background:#0f172a;border:1px solid #1f2937;padding:4px 6px;border-radius:999px;margin-top:6px}
 
-    #viewer{flex:1;position:relative;background:black;display:flex;align-items:center;justify-content:center;overflow:hidden}
-    #sky{max-width:100%;max-height:100%;display:block;transform-origin:center center}
+   #viewer {
+  flex: 1;
+  position: relative;
+  background: black;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#sky {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 130%;   /* buffer horizontally */
+  height: 130%;  /* buffer vertically */
+  transform: translate(-50%, -50%);
+  object-fit: cover; /* fill entire screen */
+  cursor: grab;
+}
+
+#sky.dragging {
+  cursor: grabbing;
+}
     .overlay{position:absolute;pointer-events:none;border:2px solid var(--red);border-radius:2px;transform-origin:center center}
     #guideOverlay{border-color:var(--green)}
     #spinner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;color:white;font-size:14px}
@@ -31,9 +51,14 @@
 </head>
 <body>
   <aside id="controls">
-    <h3>ASI2600MC Duo FOV Planner</h3>
+    <h3>FOV Planner</h3>
 
-    <!-- Survey dropdown removed; using fixed DSS colored -->
+   <label>Sky Survey</label>
+<select id="surveySelect">
+  <option value="DSS colored">DSS2 Color</option>
+  <option value="DSS2 red">DSS2 Red</option>
+  <option value="PanSTARRS/DR1/color-z-zg-g">Pan-STARRS (color)</option>
+</select>
 
     <!-- NEW: object dropdown (names only) -->
     <label>Astrophotography Object</label>
@@ -82,7 +107,7 @@
     <div class="row">
       <div>
         <label>Sky FOV (deg)</label>
-        <input id="fov" type="number" step="0.1" value="10" />
+        <input id="fov" type="number" step="1" value="20" />
       </div>
       <div>
         <label>Rotation (°)</label>
@@ -90,31 +115,55 @@
       </div>
     </div>
 
-    <label>Main sensor preset</label>
-    <select id="mainPreset"></select>
+<label>Main sensor preset</label>
+<select id="mainPreset"></select>
 
-    <label>Guide sensor preset</label>
-    <select id="guidePreset"></select>
+<!-- Custom inputs for main sensor -->
+<div id="mainCustomInputs" class="row" style="display:none; margin-top:4px;">
+  <input id="mainCustomW" type="number" step="1" placeholder="Width px">
+  <input id="mainCustomH" type="number" step="1" placeholder="Height px">
+  <input id="mainCustomPix" type="number" step="0.01" placeholder="Pixel μm">
+</div>
 
-    <div class="row">
-      <div>
-        <label>Focal length (mm)</label>
-        <input id="focal" type="number" step="1" value="270" />
-      </div>
-      <div>
-        <label>Image size (px)</label>
-        <input id="imgSize" type="number" step="1" value="900" />
-      </div>
-    </div>
+<label>Guide sensor preset</label>
+<select id="guidePreset"></select>
 
+<!-- Custom inputs for guide sensor -->
+<div id="guideCustomInputs" class="row" style="display:none; margin-top:4px;">
+  <input id="guideCustomW" type="number" step="1" placeholder="Width px">
+  <input id="guideCustomH" type="number" step="1" placeholder="Height px">
+  <input id="guideCustomPix" type="number" step="0.01" placeholder="Pixel μm">
+</div>
+
+<div class="row">
+  <div>
+    <label>Focal length (mm)</label>
+    <input id="focal" type="number" step="1" value="270" />
+  </div>
+  <div>
+    <label>Pixel size preset</label>
+    <select id="pixelPreset">
+      <option value="600">Low (600 px)</option>
+      <option value="1200">Medium (1200 px)</option>
+      <option value="2400">High (2400 px)</option>
+      <option value="custom">Custom</option>
+    </select>
+  </div>
+</div>
+
+<!-- Custom input is hidden until "Custom" is chosen -->
+<div id="customSizeContainer" style="display:none; margin-top:8px;">
+  <label>Custom image size (px)</label>
+  <input id="imgSize" type="number" step="1" value="900" />
+</div>
     <label>Guide offset (mm) — center relative to main</label>
     <div class="row">
       <input id="guideOffX" type="number" step="0.1" value="0" placeholder="X (+right)" />
-      <input id="guideOffY" type="number" step="0.1" value="-18.3" placeholder="Y (+up)" />
+      <input id="guideOffY" type="number" step="0.1" value="18.3" placeholder="Y (+up)" />
     </div>
     <div>
       <button class="btn" id="resetDuo">Reset to Duo defaults</button>
-      <span class="pill">Default offset ≈ X 0 mm, Y -18.3 mm</span>
+      <span class="pill">Default offset ≈ X 0 mm, Y 18.3 mm</span>
     </div>
 
     <div class="row">
@@ -137,13 +186,44 @@
   </section>
 
   <script>
-    // --- Presets (ASI2600MC Duo) ---
-    const mainPresets = {
-      "ASI2600MC Duo (IMX571)": { w: 6248, h: 4176, pix: 3.76 } // pixels, microns
-    };
-    const guidePresets = {
-      "Duo Guide (SC2210)": { w: 1920, h: 1080, pix: 4.0 }
-    };
+// --- Presets ---
+// Main imaging camera sensors (20 popular ones)
+const mainPresets = {
+  "ASI2600MC Duo (IMX571)": { w: 6248, h: 4176, pix: 3.76 },
+  "ASI2600MM Pro (IMX571)": { w: 6248, h: 4176, pix: 3.76 },
+  "ASI6200MM/MC Pro (IMX455)": { w: 9576, h: 6388, pix: 3.76 },
+  "QHY600M (IMX455)": { w: 9576, h: 6388, pix: 3.76 },
+  "ASI533MM/MC Pro (IMX533)": { w: 3008, h: 3008, pix: 3.76 },
+  "QHY268M (IMX571)": { w: 6280, h: 4210, pix: 3.76 },
+  "ASI2400MC Pro (IMX410)": { w: 6072, h: 4044, pix: 5.94 },
+  "QHY410C (IMX410)": { w: 6072, h: 4044, pix: 5.94 },
+  "ASI294MM/MC Pro (IMX492/294)": { w: 4144, h: 2822, pix: 4.63 },
+  "QHY294M (IMX492)": { w: 4144, h: 2822, pix: 4.63 },
+  "ASI183MM/MC Pro (IMX183)": { w: 5496, h: 3672, pix: 2.4 },
+  "QHY183M/C (IMX183)": { w: 5544, h: 3684, pix: 2.4 },
+  "ASI071MC Pro (IMX071)": { w: 4944, h: 3284, pix: 4.78 },
+  "QHY247C (IMX193)": { w: 6000, h: 4000, pix: 3.91 },
+  "KAF-8300 (Classic CCD)": { w: 3358, h: 2536, pix: 5.4 },
+  "ASI178MM/MC (IMX178)": { w: 3096, h: 2080, pix: 2.4 },
+  "ASI174MM/MC (IMX174)": { w: 1936, h: 1216, pix: 5.86 },
+  "ASI120MM/MC (AR0130)": { w: 1280, h: 960, pix: 3.75 },
+  "Canon 6D (Full-frame DSLR)": { w: 5472, h: 3648, pix: 6.54 },
+  "Canon 90D (APS-C DSLR)": { w: 6960, h: 4640, pix: 3.2 }
+};
+
+// Guide camera sensors (10 popular ones)
+const guidePresets = {
+  "Duo Guide (SC2210)": { w: 1920, h: 1080, pix: 4.0 },
+  "ASI290MM Mini (IMX290)": { w: 1936, h: 1096, pix: 2.9 },
+  "ASI120MM Mini (AR0130)": { w: 1280, h: 960, pix: 3.75 },
+  "ASI174MM Mini (IMX174)": { w: 1936, h: 1216, pix: 5.86 },
+  "ASI178MM Mini (IMX178)": { w: 3096, h: 2080, pix: 2.4 },
+  "QHY5L-II (MT9M034)": { w: 1280, h: 960, pix: 3.75 },
+  "QHY5III-462C (IMX462)": { w: 1920, h: 1080, pix: 2.9 },
+  "QHY5III-178M (IMX178)": { w: 3096, h: 2080, pix: 2.4 },
+  "Lodestar X2 (ICX829 CCD)": { w: 752, h: 580, pix: 8.2 },
+  "Starlight Xpress Ultrastar (ICX825 CCD)": { w: 1392, h: 1040, pix: 6.45 }
+};
 
     // --- DOM ---
     const sky = document.getElementById('sky');
@@ -151,7 +231,7 @@
     const viewer = document.getElementById('viewer');
     const mainOverlay = document.getElementById('mainOverlay');
     const guideOverlay = document.getElementById('guideOverlay');
-
+sky.draggable = false; // stop browser from trying to drag image
     const objectSelect = document.getElementById('objectSelect');
     const raH = document.getElementById('raH');
     const raM = document.getElementById('raM');
@@ -170,7 +250,9 @@
     const mainInfo = document.getElementById('mainInfo');
     const guideInfo = document.getElementById('guideInfo');
     const scaleInfo = document.getElementById('scaleInfo');
-
+// References to custom input divs
+const mainCustomInputs = document.getElementById('mainCustomInputs');
+const guideCustomInputs = document.getElementById('guideCustomInputs');
     // populate preset dropdowns
     for (let k in mainPresets) {
       const o = document.createElement('option'); o.value = k; o.textContent = k; mainPresetEl.appendChild(o);
@@ -178,16 +260,99 @@
     for (let k in guidePresets) {
       const o = document.createElement('option'); o.value = k; o.textContent = k; guidePresetEl.appendChild(o);
     }
+// --- Add "Custom…" option and show/hide inputs ---
+const mainCustomOption = document.createElement('option');
+mainCustomOption.value = 'Custom';
+mainCustomOption.textContent = 'Custom…';
+mainPresetEl.appendChild(mainCustomOption);
+
+const guideCustomOption = document.createElement('option');
+guideCustomOption.value = 'Custom';
+guideCustomOption.textContent = 'Custom…';
+guidePresetEl.appendChild(guideCustomOption);
+
+// Show/hide custom input fields when "Custom…" is selected
+mainPresetEl.addEventListener('change', () => {
+  mainCustomInputs.style.display = (mainPresetEl.value === 'Custom') ? 'grid' : 'none';
+  updateOverlay();
+});
+
+guidePresetEl.addEventListener('change', () => {
+  guideCustomInputs.style.display = (guidePresetEl.value === 'Custom') ? 'grid' : 'none';
+  updateOverlay();
+});
+// --- Call updateOverlay when preset changes ---
+mainPresetEl.addEventListener('change', updateOverlay);
+guidePresetEl.addEventListener('change', updateOverlay);
+
+// --- Call updateOverlay when rotation, FOV, or guide offsets change ---
+rotationEl.addEventListener('input', updateOverlay);
+fovEl.addEventListener('input', updateOverlay);
+guideOffX.addEventListener('input', updateOverlay);
+guideOffY.addEventListener('input', updateOverlay);
+// Pixel size preset logic
+// Handle preset changes
+document.getElementById('pixelPreset').addEventListener('change', (e) => {
+  const val = e.target.value;
+  const customBox = document.getElementById('customSizeContainer');
+  const imgSizeEl = document.getElementById('imgSize');
+
+  if (val === "custom") {
+    customBox.style.display = "block";
+  } else {
+    customBox.style.display = "none";
+    imgSizeEl.value = val;  // store the selected preset (600, 1200, 2400)
+  }
+});
+
+// Modify loadSky() to respect the chosen value
+function loadSky() {
+  const preset = document.getElementById('pixelPreset').value;
+  const imgSizeEl = document.getElementById('imgSize');
+
+  let imgSize;
+  if (preset === "custom") {
+    imgSize = parseInt(imgSizeEl.value, 10);
+  } else {
+    imgSize = parseInt(preset, 10); // use preset directly
+  }
+
+  console.log("Loading sky with image size:", imgSize);
+
+  // 🔴 Make sure the image request uses `imgSize` instead of hardcoding 600
+  fetchSkyImage(imgSize);
+}
+
+
+// If custom input is changed, reload sky
+imgSizeEl.addEventListener('input', loadSky);
+
+focalEl.addEventListener('input', updateOverlay);
+// Refresh sky whenever survey is changed
+document.getElementById('surveySelect').addEventListener('change', loadSky);
+// --- Call updateOverlay for main custom fields ---
+const mainCustomFields = ['mainCustomW', 'mainCustomH', 'mainCustomPix'];
+mainCustomFields.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updateOverlay);
+});
+
+// --- Call updateOverlay for guide custom fields ---
+const guideCustomFields = ['guideCustomW', 'guideCustomH', 'guideCustomPix'];
+guideCustomFields.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updateOverlay);
+});
 
     // sensible defaults
-    raH.value = '10'; raM.value = '0'; raS.value = '0';
+    raH.value = '0'; raM.value = '0'; raS.value = '0';
     decD.value = '0'; decM.value = '0'; decS.value = '0';
 
     document.getElementById('resetDuo').onclick = () => {
       mainPresetEl.value = 'ASI2600MC Duo (IMX571)';
       guidePresetEl.value = 'Duo Guide (SC2210)';
       guideOffX.value = 0;
-      guideOffY.value = -18.3;
+      guideOffY.value = 18.3;
       updateOverlay();
     };
     // default select
@@ -201,89 +366,130 @@
     function angularSizeDeg(mm, focal){ return 2 * Math.atan((mm/2)/focal) * DEG_PER_RAD; }
     function arcsecPerPixel(pixelMicron, focal){ return 206.265 * pixelMicron / focal; }
 
-    function loadSky(){
-      const ra = sexaToDeg(raH.value, raM.value, raS.value);
-      const dec = dmsToDeg(decD.value, decM.value, decS.value);
-      const fov = parseFloat(fovEl.value) || 10.0;
-      const size = Math.max(128, Math.min(2048, parseInt(imgSizeEl.value)||900));
-      const rot = parseFloat(rotationEl.value)||0;
-      const hips = encodeURIComponent("DSS colored"); // fixed survey (DSS2 Color)
-      const url = `https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=${hips}&ra=${ra}&dec=${dec}&width=${size}&height=${size}&fov=${fov}&rotation=${rot}&format=jpg`;
-      spinner.style.display = 'block';
-      sky.src = url;
-    }
+function loadSky() {
+  const ra = sexaToDeg(raH.value, raM.value, raS.value);
+  const dec = dmsToDeg(decD.value, decM.value, decS.value);
+  const fov = parseFloat(fovEl.value) || 10.0;
+  const rot = parseFloat(rotationEl.value) || 0;
+  const hips = encodeURIComponent(document.getElementById('surveySelect').value);
 
-    function updateOverlay(){
-      if(!sky.complete || !sky.naturalWidth){ return; }
-      const focal = parseFloat(focalEl.value)||270;
-      const main = mainPresets[mainPresetEl.value];
-      const guide = guidePresets[guidePresetEl.value];
+  // --- Pixel preset vs custom handling ---
+  const preset = document.getElementById('pixelPreset').value;
+  const imgSizeInput = document.getElementById('imgSize');
+  let imgSize;
 
-      // sensor physical sizes (mm)
-      const mainWmm = main.w * main.pix / 1000;
-      const mainHmm = main.h * main.pix / 1000;
-      const guideWmm = guide.w * guide.pix / 1000;
-      const guideHmm = guide.h * guide.pix / 1000;
+  if (preset === "custom") {
+    imgSize = parseInt(imgSizeInput.value, 10) || 900;
+  } else {
+    imgSize = parseInt(preset, 10); // 600, 1200, or 2400
+  }
 
-      // FOV (deg) per side of each sensor
-      const mainFovWdeg = angularSizeDeg(mainWmm, focal);
-      const mainFovHdeg = angularSizeDeg(mainHmm, focal);
-      const guideFovWdeg = angularSizeDeg(guideWmm, focal);
-      const guideFovHdeg = angularSizeDeg(guideHmm, focal);
+  // Clamp within safe range (don’t exceed server limits)
+  imgSize = Math.max(128, Math.min(3000, imgSize));
 
-      // Pixels per degree on the displayed sky image
-      const skyRect = sky.getBoundingClientRect();
-      const viewRect = viewer.getBoundingClientRect();
-      const skyFovDeg = parseFloat(fovEl.value)||10.0; // hips2fits FOV spans the width for square images
-      const pxPerDeg = skyRect.width / skyFovDeg;
+  console.log("Loading sky with:", { ra, dec, fov, rot, imgSize });
 
-      // Overlay sizes in screen px
-      const mainWpx = mainFovWdeg * pxPerDeg;
-      const mainHpx = mainFovHdeg * pxPerDeg;
-      const guideWpx = guideFovWdeg * pxPerDeg;
-      const guideHpx = guideFovHdeg * pxPerDeg;
+  const url = `https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=${hips}&ra=${ra}&dec=${dec}&width=${imgSize}&height=${imgSize}&fov=${fov}&rotation=${rot}&format=jpg`;
 
-      // Center of sky (relative to viewer)
-      const cx = (skyRect.left + skyRect.width/2) - viewRect.left;
-      const cy = (skyRect.top + skyRect.height/2) - viewRect.top;
+  spinner.style.display = 'block';
+  sky.src = url;
+}
 
-      // Rotation (deg) for overlays
-      const rot = parseFloat(rotationEl.value)||0;
 
-      // Apply sizes and center position to main overlay
-      mainOverlay.style.width = mainWpx + 'px';
-      mainOverlay.style.height = mainHpx + 'px';
-      mainOverlay.style.left = cx + 'px';
-      mainOverlay.style.top = cy + 'px';
-      mainOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+function updateOverlay() {
+  if (!sky.complete || !sky.naturalWidth) return;
 
-      // Guide overlay size
-      guideOverlay.style.width = guideWpx + 'px';
-      guideOverlay.style.height = guideHpx + 'px';
+  const focal = parseFloat(focalEl.value) || 270;
 
-      // Offset in mm -> degrees -> pixels, then rotate by camera rotation
-      const offXmm = parseFloat(guideOffX.value)||0; // +right
-      const offYmm = parseFloat(guideOffY.value)||0; // +up
-      const offXdeg = (offXmm / focal) * DEG_PER_RAD;
-      const offYdeg = (offYmm / focal) * DEG_PER_RAD;
-      const offXpx = offXdeg * pxPerDeg;
-      const offYpx = offYdeg * pxPerDeg;
+  // --- Use custom inputs if "Custom" is selected ---
+  let main, guide;
+  if (mainPresetEl.value === 'Custom') {
+    main = {
+      w: parseFloat(document.getElementById('mainCustomW').value) || 0,
+      h: parseFloat(document.getElementById('mainCustomH').value) || 0,
+      pix: parseFloat(document.getElementById('mainCustomPix').value) || 1
+    };
+  } else {
+    main = mainPresets[mainPresetEl.value];
+  }
 
-      const th = (rot * Math.PI)/180;
-      const offRotX = offXpx * Math.cos(th) - offYpx * Math.sin(th);
-      const offRotY = offXpx * Math.sin(th) + offYpx * Math.cos(th);
+  if (guidePresetEl.value === 'Custom') {
+    guide = {
+      w: parseFloat(document.getElementById('guideCustomW').value) || 0,
+      h: parseFloat(document.getElementById('guideCustomH').value) || 0,
+      pix: parseFloat(document.getElementById('guideCustomPix').value) || 1
+    };
+  } else {
+    guide = guidePresets[guidePresetEl.value];
+  }
 
-      guideOverlay.style.left = (cx + offRotX) + 'px';
-      guideOverlay.style.top = (cy + offRotY) + 'px';
-      guideOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+  // sensor physical sizes (mm)
+  const mainWmm = main.w * main.pix / 1000;
+  const mainHmm = main.h * main.pix / 1000;
+  const guideWmm = guide.w * guide.pix / 1000;
+  const guideHmm = guide.h * guide.pix / 1000;
 
-      // Readouts
-      const mainScale = arcsecPerPixel(main.pix, focal).toFixed(2);
-      const guideScale = arcsecPerPixel(guide.pix, focal).toFixed(2);
-      mainInfo.textContent = `Main FOV: ${mainFovWdeg.toFixed(2)}° × ${mainFovHdeg.toFixed(2)}° | ${mainScale}"/px`;
-      guideInfo.textContent = `Guide FOV: ${guideFovWdeg.toFixed(2)}° × ${guideFovHdeg.toFixed(2)}° | ${guideScale}"/px`;
-      scaleInfo.textContent = `Sky: ${skyFovDeg}° across, ${pxPerDeg.toFixed(1)} px/° (display)`;
-    }
+  // FOV (deg) per side of each sensor
+  const mainFovWdeg = angularSizeDeg(mainWmm, focal);
+  const mainFovHdeg = angularSizeDeg(mainHmm, focal);
+  const guideFovWdeg = angularSizeDeg(guideWmm, focal);
+  const guideFovHdeg = angularSizeDeg(guideHmm, focal);
+
+  // Pixels per degree on the displayed sky image
+  const skyRect = sky.getBoundingClientRect();
+  const viewRect = viewer.getBoundingClientRect();
+  const skyFovDeg = parseFloat(fovEl.value) || 10.0;
+  const pxPerDeg = skyRect.width / skyFovDeg;
+
+  // Overlay sizes in screen px
+  const mainWpx = mainFovWdeg * pxPerDeg;
+  const mainHpx = mainFovHdeg * pxPerDeg;
+  const guideWpx = guideFovWdeg * pxPerDeg;
+  const guideHpx = guideFovHdeg * pxPerDeg;
+
+// Center of viewer
+const cx = viewRect.width / 2;
+const cy = viewRect.height / 2;
+
+
+  // Rotation (deg) for overlays
+  const rot = parseFloat(rotationEl.value) || 0;
+
+  // Apply sizes and center position to main overlay
+  mainOverlay.style.width = mainWpx + 'px';
+  mainOverlay.style.height = mainHpx + 'px';
+  mainOverlay.style.left = cx + 'px';
+  mainOverlay.style.top = cy + 'px';
+  mainOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+
+  // Guide overlay size
+  guideOverlay.style.width = guideWpx + 'px';
+  guideOverlay.style.height = guideHpx + 'px';
+
+  // Offset in mm -> degrees -> pixels, then rotate by camera rotation
+  const offXmm = parseFloat(guideOffX.value) || 0;
+  const offYmm = parseFloat(guideOffY.value) || 0;
+  const offXdeg = (offXmm / focal) * DEG_PER_RAD;
+  const offYdeg = (offYmm / focal) * DEG_PER_RAD;
+  const offXpx = offXdeg * pxPerDeg;
+  const offYpx = offYdeg * pxPerDeg;
+
+  const th = (rot * Math.PI) / 180;
+  const offRotX = offXpx * Math.cos(th) - offYpx * Math.sin(th);
+  const offRotY = offXpx * Math.sin(th) + offYpx * Math.cos(th);
+
+  guideOverlay.style.left = (cx + offRotX) + 'px';
+  guideOverlay.style.top = (cy + offRotY) + 'px';
+  guideOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+
+  // Readouts
+  const mainScale = arcsecPerPixel(main.pix, focal).toFixed(2);
+  const guideScale = arcsecPerPixel(guide.pix, focal).toFixed(2);
+  mainInfo.textContent = `Main FOV: ${mainFovWdeg.toFixed(2)}° × ${mainFovHdeg.toFixed(2)}° | ${mainScale}"/px`;
+  guideInfo.textContent = `Guide FOV: ${guideFovWdeg.toFixed(2)}° × ${guideFovHdeg.toFixed(2)}° | ${guideScale}"/px`;
+  scaleInfo.textContent = `Sky: ${skyFovDeg}° across, ${pxPerDeg.toFixed(1)} px/° (display)`;
+}
+
 
    function nudgeRA(dir){
   let h = parseInt(raH.value) || 0;
@@ -458,20 +664,110 @@
       if(objectSelect.value) setCoordsFromObject(objectSelect.value);
     });
 
-    // initial
-    document.getElementById('resetDuo').click();
-    loadSky();
+// --- Initial setup ---
+document.getElementById('resetDuo').click();
+loadSky();
+
+// --- Live panning that locks RA/Dec ---
+let isDragging = false;
+let startX = 0, startY = 0;
+let currentOffsetX = 0, currentOffsetY = 0;
+let tempOffsetX = 0, tempOffsetY = 0;
+
+function applyOffset() {
+  // Move sky according to drag
+  const totalX = currentOffsetX + tempOffsetX;
+  const totalY = currentOffsetY + tempOffsetY;
+  sky.style.transform = `translate(calc(-50% + ${totalX}px), calc(-50% + ${totalY}px))`;
+
+  // Keep overlays centered regardless of drag
+  const rot = rotationEl.value || 0;
+  mainOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+  guideOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+}
+
+
+viewer.addEventListener('mousedown', e => {
+  isDragging = true;
+  startX = e.clientX;
+  startY = e.clientY;
+  tempOffsetX = 0;
+  tempOffsetY = 0;
+  sky.classList.add('dragging');
+});
+
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  tempOffsetX = e.clientX - startX;
+  tempOffsetY = e.clientY - startY;
+  applyOffset();
+});
+
+window.addEventListener('mouseup', e => {
+  if (!isDragging) return;
+  isDragging = false;
+  sky.classList.remove('dragging');
+
+  const dx = tempOffsetX;
+  const dy = tempOffsetY;
+
+  // Convert to RA/Dec changes...
+  let raDeg = sexaToDeg(raH.value, raM.value, raS.value);
+  let decDeg = dmsToDeg(decD.value, decM.value, decS.value);
+
+  const skyRect = sky.getBoundingClientRect();
+  const skyFovDeg = parseFloat(fovEl.value) || 10.0;
+  const pxPerDeg = skyRect.width / skyFovDeg;
+  const decRad = decDeg * Math.PI / 180;
+
+  const dRAdeg = dx / (pxPerDeg * Math.cos(decRad));
+  const dDecDeg = dy / pxPerDeg;
+
+  raDeg = (raDeg + dRAdeg + 360) % 360;
+  decDeg += dDecDeg;
+  decDeg = Math.max(-90, Math.min(90, decDeg));
+
+  // Update RA/Dec inputs (same as before)
+  const raHours = raDeg / 15;
+  raH.value = Math.floor(raHours);
+  raM.value = Math.floor((raHours % 1) * 60);
+  raS.value = (((raHours * 3600) % 60).toFixed(1));
+
+  const sign = decDeg < 0 ? -1 : 1;
+  const adec = Math.abs(decDeg);
+  decD.value = (sign < 0 ? '-' : '') + Math.floor(adec);
+  decM.value = Math.floor((adec % 1) * 60);
+  decS.value = (((adec * 3600) % 60).toFixed(1));
+
+  // Commit drag
+  currentOffsetX = 0;
+  currentOffsetY = 0;
+  tempOffsetX = 0;
+  tempOffsetY = 0;
+
+  // Load new sky image
+  const url = encodeURIComponent(document.getElementById('surveySelect').value);
+  const fov = parseFloat(fovEl.value) || 10.0;
+  const size = Math.max(128, Math.min(2048, parseInt(imgSizeEl.value)||600));
+  const rot = parseFloat(rotationEl.value)||0;
+  const newSkyURL = `https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=${url}&ra=${raDeg}&dec=${decDeg}&width=${size}&height=${size}&fov=${fov}&rotation=${rot}&format=jpg`;
+
+  spinner.style.display = 'block';
+  const newImg = new Image();
+  newImg.onload = () => {
+    sky.src = newImg.src;
+    spinner.style.display = 'none';
+    applyOffset();
+  };
+  newImg.src = newSkyURL;
+});
+
+// --- Service Worker registration ---
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(reg => console.log("Service worker registered", reg.scope))
+    .catch(err => console.error("SW registration failed", err));
+}
   </script>
-	<script>
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js")
-      .then(reg => console.log("Service Worker registered:", reg))
-      .catch(err => console.error("Service Worker error:", err));
-  }
-</script>
 </body>
 </html>
-
-
-
-
