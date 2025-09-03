@@ -687,31 +687,28 @@ function applyOffset() {
 }
 
 
-viewer.addEventListener('mousedown', e => {
+function startDrag(x, y) {
   isDragging = true;
-  startX = e.clientX;
-  startY = e.clientY;
+  startX = x;
+  startY = y;
   tempOffsetX = 0;
   tempOffsetY = 0;
   sky.classList.add('dragging');
-});
+}
 
-window.addEventListener('mousemove', e => {
+function moveDrag(x, y) {
   if (!isDragging) return;
-  tempOffsetX = e.clientX - startX;
-  tempOffsetY = e.clientY - startY;
+  tempOffsetX = x - startX;
+  tempOffsetY = y - startY;
   applyOffset();
-});
+}
 
-window.addEventListener('mouseup', e => {
+function endDrag(dx, dy) {
   if (!isDragging) return;
   isDragging = false;
   sky.classList.remove('dragging');
 
-  const dx = tempOffsetX;
-  const dy = tempOffsetY;
-
-  // Convert to RA/Dec changes...
+  // === Your RA/Dec conversion + reload sky ===
   let raDeg = sexaToDeg(raH.value, raM.value, raS.value);
   let decDeg = dmsToDeg(decD.value, decM.value, decS.value);
 
@@ -727,7 +724,7 @@ window.addEventListener('mouseup', e => {
   decDeg += dDecDeg;
   decDeg = Math.max(-90, Math.min(90, decDeg));
 
-  // Update RA/Dec inputs (same as before)
+  // Update RA/Dec inputs
   const raHours = raDeg / 15;
   raH.value = Math.floor(raHours);
   raM.value = Math.floor((raHours % 1) * 60);
@@ -739,7 +736,7 @@ window.addEventListener('mouseup', e => {
   decM.value = Math.floor((adec % 1) * 60);
   decS.value = (((adec * 3600) % 60).toFixed(1));
 
-  // Commit drag
+  // Reset offsets
   currentOffsetX = 0;
   currentOffsetY = 0;
   tempOffsetX = 0;
@@ -760,7 +757,26 @@ window.addEventListener('mouseup', e => {
     applyOffset();
   };
   newImg.src = newSkyURL;
-});
+}
+
+// --- Mouse Events ---
+viewer.addEventListener('mousedown', e => startDrag(e.clientX, e.clientY));
+window.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+window.addEventListener('mouseup', () => endDrag(tempOffsetX, tempOffsetY));
+
+// --- Touch Events (iPhone/iPad) ---
+viewer.addEventListener('touchstart', e => {
+  const touch = e.touches[0];
+  startDrag(touch.clientX, touch.clientY);
+}, { passive: false });
+
+window.addEventListener('touchmove', e => {
+  e.preventDefault(); // stops the page from scrolling while dragging
+  const touch = e.touches[0];
+  moveDrag(touch.clientX, touch.clientY);
+}, { passive: false });
+
+window.addEventListener('touchend', () => endDrag(tempOffsetX, tempOffsetY));
 
 // --- Service Worker registration ---
 if ("serviceWorker" in navigator) {
