@@ -3,7 +3,786 @@
 <head>
   <meta charset="UTF-8" />
   <title>ASI2600MC Duo – DSS2 Red/Color FOV Planner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" /<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ASI2600MC Duo – DSS2 Red/Color FOV Planner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{--bg:#0b0b0f;--panel:#121219;--ink:#e8e8ef;--muted:#9aa4b2;--accent:#7dd3fc;--red:#ef4444;--green:#22c55e}
+    *{box-sizing:border-box}
+    body{margin:0;height:100vh;display:flex;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+    #controls{width:310px;max-width:40vw;background:var(--panel);padding:12px 12px 16px;overflow:auto;border-right:1px solid #1f2937}
+    #controls h3{margin:0 0 8px;font-size:16px;font-weight:600}
+    #controls label{display:block;margin:6px 0 4px;font-size:12px;color:var(--muted)}
+    #controls input, #controls select{width:100%;padding:6px 8px;border-radius:8px;border:1px solid #374151;background:#0f1116;color:var(--ink)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+    .row4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+    .btn{display:inline-block;margin:4px 2px;padding:6px 10px;border-radius:8px;border:1px solid #2b3340;background:#10141b;color:var(--ink);cursor:pointer}
+    .btn:hover{background:#121a24}
+    .pill{display:inline-block;font-size:11px;color:#cbd5e1;background:#0f172a;border:1px solid #1f2937;padding:4px 6px;border-radius:999px;margin-top:6px}
+
+   #viewer {
+  flex: 1;
+  position: relative;
+  background: black;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#sky {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 130%;   /* buffer horizontally */
+  height: 130%;  /* buffer vertically */
+  transform: translate(-50%, -50%);
+  object-fit: cover; /* fill entire screen */
+  cursor: grab;
+}
+
+#sky.dragging {
+  cursor: grabbing;
+}
+    .overlay{position:absolute;pointer-events:none;border:2px solid var(--red);border-radius:2px;transform-origin:center center}
+    #guideOverlay{border-color:var(--green)}
+    #spinner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;color:white;font-size:14px}
+    #readout{font-size:12px;color:#cbd5e1;border-top:1px solid #1f2937;margin-top:8px;padding-top:6px}
+  </style>
+</head>
+<body>
+  <aside id="controls">
+    <h3>FOV Planner</h3>
+
+   <label>Sky Survey</label>
+<select id="surveySelect">
+  <option value="DSS colored">DSS2 Color</option>
+  <option value="DSS2 red">DSS2 Red</option>
+  <option value="PanSTARRS/DR1/color-z-zg-g">Pan-STARRS (color)</option>
+</select>
+
+    <!-- NEW: object dropdown (names only) -->
+    <label>Astrophotography Object</label>
+    <select id="objectSelect">
+      <option value="">(choose object…)</option>
+    </select>
+
+    <div class="row3">
+      <div>
+        <label>RA (h)</label>
+        <input id="raH" inputmode="decimal" />
+      </div>
+      <div>
+        <label>RA (m)</label>
+        <input id="raM" inputmode="decimal" />
+      </div>
+      <div>
+        <label>RA (s)</label>
+        <input id="raS" inputmode="decimal" />
+      </div>
+    </div>
+   <div class="row">
+  <button class="btn" onclick="nudgeRA(-1)">−1m RA</button>
+  <button class="btn" onclick="nudgeRA(1)">+1m RA</button>
+</div>
+
+    <div class="row3">
+      <div>
+        <label>Dec (°)</label>
+        <input id="decD" inputmode="decimal" />
+      </div>
+      <div>
+        <label>Dec (′)</label>
+        <input id="decM" inputmode="decimal" />
+      </div>
+      <div>
+        <label>Dec (″)</label>
+        <input id="decS" inputmode="decimal" />
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="nudgeDec(-1)">−1′ Dec</button>
+      <button class="btn" onclick="nudgeDec(1)">+1′ Dec</button>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Sky FOV (deg)</label>
+        <input id="fov" type="number" step="1" value="20" />
+      </div>
+      <div>
+        <label>Rotation (°)</label>
+        <input id="rotation" type="number" step="1" value="0" />
+      </div>
+    </div>
+
+<label>Main sensor preset</label>
+<select id="mainPreset"></select>
+
+<!-- Custom inputs for main sensor -->
+<div id="mainCustomInputs" class="row" style="display:none; margin-top:4px;">
+  <input id="mainCustomW" type="number" step="1" placeholder="Width px">
+  <input id="mainCustomH" type="number" step="1" placeholder="Height px">
+  <input id="mainCustomPix" type="number" step="0.01" placeholder="Pixel μm">
+</div>
+
+<label>Guide sensor preset</label>
+<select id="guidePreset"></select>
+
+<!-- Custom inputs for guide sensor -->
+<div id="guideCustomInputs" class="row" style="display:none; margin-top:4px;">
+  <input id="guideCustomW" type="number" step="1" placeholder="Width px">
+  <input id="guideCustomH" type="number" step="1" placeholder="Height px">
+  <input id="guideCustomPix" type="number" step="0.01" placeholder="Pixel μm">
+</div>
+
+<div class="row">
+  <div>
+    <label>Focal length (mm)</label>
+    <input id="focal" type="number" step="1" value="270" />
+  </div>
+  <div>
+    <label>Pixel size preset</label>
+    <select id="pixelPreset">
+      <option value="600">Low (600 px)</option>
+      <option value="1200">Medium (1200 px)</option>
+      <option value="2400">High (2400 px)</option>
+      <option value="custom">Custom</option>
+    </select>
+  </div>
+</div>
+
+<!-- Custom input is hidden until "Custom" is chosen -->
+<div id="customSizeContainer" style="display:none; margin-top:8px;">
+  <label>Custom image size (px)</label>
+  <input id="imgSize" type="number" step="1" value="900" />
+</div>
+    <label>Guide offset (mm) — center relative to main</label>
+    <div class="row">
+      <input id="guideOffX" type="number" step="0.1" value="0" placeholder="X (+right)" />
+      <input id="guideOffY" type="number" step="0.1" value="18.3" placeholder="Y (+up)" />
+    </div>
+    <div>
+      <button class="btn" id="resetDuo">Reset to Duo defaults</button>
+      <span class="pill">Default offset ≈ X 0 mm, Y 18.3 mm</span>
+    </div>
+
+    <div class="row">
+      <button class="btn" onclick="loadSky()">Load Sky</button>
+      <button class="btn" onclick="updateOverlay()">Refresh Overlays</button>
+    </div>
+
+    <div id="readout">
+      <div id="mainInfo">Main: —</div>
+      <div id="guideInfo">Guide: —</div>
+      <div id="scaleInfo">Scale: —</div>
+    </div>
+  </aside>
+
+  <section id="viewer">
+    <img id="sky" alt="Sky background" />
+    <div id="mainOverlay" class="overlay" title="Main sensor"></div>
+    <div id="guideOverlay" class="overlay" title="Guide sensor"></div>
+    <div id="spinner">Loading…</div>
+  </section>
+
+  <script>
+// --- Presets ---
+// Main imaging camera sensors (20 popular ones)
+const mainPresets = {
+  "ASI2600MC Duo (IMX571)": { w: 6248, h: 4176, pix: 3.76 },
+  "ASI2600MM Pro (IMX571)": { w: 6248, h: 4176, pix: 3.76 },
+  "ASI6200MM/MC Pro (IMX455)": { w: 9576, h: 6388, pix: 3.76 },
+  "QHY600M (IMX455)": { w: 9576, h: 6388, pix: 3.76 },
+  "ASI533MM/MC Pro (IMX533)": { w: 3008, h: 3008, pix: 3.76 },
+  "QHY268M (IMX571)": { w: 6280, h: 4210, pix: 3.76 },
+  "ASI2400MC Pro (IMX410)": { w: 6072, h: 4044, pix: 5.94 },
+  "QHY410C (IMX410)": { w: 6072, h: 4044, pix: 5.94 },
+  "ASI294MM/MC Pro (IMX492/294)": { w: 4144, h: 2822, pix: 4.63 },
+  "QHY294M (IMX492)": { w: 4144, h: 2822, pix: 4.63 },
+  "ASI183MM/MC Pro (IMX183)": { w: 5496, h: 3672, pix: 2.4 },
+  "QHY183M/C (IMX183)": { w: 5544, h: 3684, pix: 2.4 },
+  "ASI071MC Pro (IMX071)": { w: 4944, h: 3284, pix: 4.78 },
+  "QHY247C (IMX193)": { w: 6000, h: 4000, pix: 3.91 },
+  "KAF-8300 (Classic CCD)": { w: 3358, h: 2536, pix: 5.4 },
+  "ASI178MM/MC (IMX178)": { w: 3096, h: 2080, pix: 2.4 },
+  "ASI174MM/MC (IMX174)": { w: 1936, h: 1216, pix: 5.86 },
+  "ASI120MM/MC (AR0130)": { w: 1280, h: 960, pix: 3.75 },
+  "Canon 6D (Full-frame DSLR)": { w: 5472, h: 3648, pix: 6.54 },
+  "Canon 90D (APS-C DSLR)": { w: 6960, h: 4640, pix: 3.2 }
+};
+
+// Guide camera sensors (10 popular ones)
+const guidePresets = {
+  "Duo Guide (SC2210)": { w: 1920, h: 1080, pix: 4.0 },
+  "ASI290MM Mini (IMX290)": { w: 1936, h: 1096, pix: 2.9 },
+  "ASI120MM Mini (AR0130)": { w: 1280, h: 960, pix: 3.75 },
+  "ASI174MM Mini (IMX174)": { w: 1936, h: 1216, pix: 5.86 },
+  "ASI178MM Mini (IMX178)": { w: 3096, h: 2080, pix: 2.4 },
+  "QHY5L-II (MT9M034)": { w: 1280, h: 960, pix: 3.75 },
+  "QHY5III-462C (IMX462)": { w: 1920, h: 1080, pix: 2.9 },
+  "QHY5III-178M (IMX178)": { w: 3096, h: 2080, pix: 2.4 },
+  "Lodestar X2 (ICX829 CCD)": { w: 752, h: 580, pix: 8.2 },
+  "Starlight Xpress Ultrastar (ICX825 CCD)": { w: 1392, h: 1040, pix: 6.45 }
+};
+
+    // --- DOM ---
+    const sky = document.getElementById('sky');
+    const spinner = document.getElementById('spinner');
+    const viewer = document.getElementById('viewer');
+    const mainOverlay = document.getElementById('mainOverlay');
+    const guideOverlay = document.getElementById('guideOverlay');
+sky.draggable = false; // stop browser from trying to drag image
+    const objectSelect = document.getElementById('objectSelect');
+    const raH = document.getElementById('raH');
+    const raM = document.getElementById('raM');
+    const raS = document.getElementById('raS');
+    const decD = document.getElementById('decD');
+    const decM = document.getElementById('decM');
+    const decS = document.getElementById('decS');
+    const fovEl = document.getElementById('fov');
+    const rotationEl = document.getElementById('rotation');
+    const mainPresetEl = document.getElementById('mainPreset');
+    const guidePresetEl = document.getElementById('guidePreset');
+    const focalEl = document.getElementById('focal');
+    const imgSizeEl = document.getElementById('imgSize');
+    const guideOffX = document.getElementById('guideOffX');
+    const guideOffY = document.getElementById('guideOffY');
+    const mainInfo = document.getElementById('mainInfo');
+    const guideInfo = document.getElementById('guideInfo');
+    const scaleInfo = document.getElementById('scaleInfo');
+// References to custom input divs
+const mainCustomInputs = document.getElementById('mainCustomInputs');
+const guideCustomInputs = document.getElementById('guideCustomInputs');
+    // populate preset dropdowns
+    for (let k in mainPresets) {
+      const o = document.createElement('option'); o.value = k; o.textContent = k; mainPresetEl.appendChild(o);
+    }
+    for (let k in guidePresets) {
+      const o = document.createElement('option'); o.value = k; o.textContent = k; guidePresetEl.appendChild(o);
+    }
+// --- Add "Custom…" option and show/hide inputs ---
+const mainCustomOption = document.createElement('option');
+mainCustomOption.value = 'Custom';
+mainCustomOption.textContent = 'Custom…';
+mainPresetEl.appendChild(mainCustomOption);
+
+const guideCustomOption = document.createElement('option');
+guideCustomOption.value = 'Custom';
+guideCustomOption.textContent = 'Custom…';
+guidePresetEl.appendChild(guideCustomOption);
+
+// Show/hide custom input fields when "Custom…" is selected
+mainPresetEl.addEventListener('change', () => {
+  mainCustomInputs.style.display = (mainPresetEl.value === 'Custom') ? 'grid' : 'none';
+  updateOverlay();
+});
+
+guidePresetEl.addEventListener('change', () => {
+  guideCustomInputs.style.display = (guidePresetEl.value === 'Custom') ? 'grid' : 'none';
+  updateOverlay();
+});
+// --- Call updateOverlay when preset changes ---
+mainPresetEl.addEventListener('change', updateOverlay);
+guidePresetEl.addEventListener('change', updateOverlay);
+
+// --- Call updateOverlay when rotation, FOV, or guide offsets change ---
+rotationEl.addEventListener('input', updateOverlay);
+fovEl.addEventListener('input', updateOverlay);
+guideOffX.addEventListener('input', updateOverlay);
+guideOffY.addEventListener('input', updateOverlay);
+// Pixel size preset logic
+// Handle preset changes
+document.getElementById('pixelPreset').addEventListener('change', (e) => {
+  const val = e.target.value;
+  const customBox = document.getElementById('customSizeContainer');
+  const imgSizeEl = document.getElementById('imgSize');
+
+  if (val === "custom") {
+    customBox.style.display = "block";
+  } else {
+    customBox.style.display = "none";
+    imgSizeEl.value = val;  // store the selected preset (600, 1200, 2400)
+  }
+});
+
+// Modify loadSky() to respect the chosen value
+function loadSky() {
+  const preset = document.getElementById('pixelPreset').value;
+  const imgSizeEl = document.getElementById('imgSize');
+
+  let imgSize;
+  if (preset === "custom") {
+    imgSize = parseInt(imgSizeEl.value, 10);
+  } else {
+    imgSize = parseInt(preset, 10); // use preset directly
+  }
+
+  console.log("Loading sky with image size:", imgSize);
+
+  // 🔴 Make sure the image request uses `imgSize` instead of hardcoding 600
+  fetchSkyImage(imgSize);
+}
+
+
+// If custom input is changed, reload sky
+imgSizeEl.addEventListener('input', loadSky);
+
+focalEl.addEventListener('input', updateOverlay);
+// Refresh sky whenever survey is changed
+document.getElementById('surveySelect').addEventListener('change', loadSky);
+// --- Call updateOverlay for main custom fields ---
+const mainCustomFields = ['mainCustomW', 'mainCustomH', 'mainCustomPix'];
+mainCustomFields.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updateOverlay);
+});
+
+// --- Call updateOverlay for guide custom fields ---
+const guideCustomFields = ['guideCustomW', 'guideCustomH', 'guideCustomPix'];
+guideCustomFields.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updateOverlay);
+});
+
+    // sensible defaults
+    raH.value = '0'; raM.value = '0'; raS.value = '0';
+    decD.value = '0'; decM.value = '0'; decS.value = '0';
+
+    document.getElementById('resetDuo').onclick = () => {
+      mainPresetEl.value = 'ASI2600MC Duo (IMX571)';
+      guidePresetEl.value = 'Duo Guide (SC2210)';
+      guideOffX.value = 0;
+      guideOffY.value = 18.3;
+      updateOverlay();
+    };
+    // default select
+    mainPresetEl.value = 'ASI2600MC Duo (IMX571)';
+    guidePresetEl.value = 'Duo Guide (SC2210)';
+
+    // --- Math helpers ---
+    const DEG_PER_RAD = 180 / Math.PI;
+    function sexaToDeg(h,m,s){ return (parseFloat(h)||0)*15 + (parseFloat(m)||0)/4 + (parseFloat(s)||0)/240; }
+    function dmsToDeg(d,m,s){ let sign = (String(d).trim().startsWith('-'))?-1:1; let dd = Math.abs(parseFloat(d)||0); return sign*(dd + (parseFloat(m)||0)/60 + (parseFloat(s)||0)/3600); }
+    function angularSizeDeg(mm, focal){ return 2 * Math.atan((mm/2)/focal) * DEG_PER_RAD; }
+    function arcsecPerPixel(pixelMicron, focal){ return 206.265 * pixelMicron / focal; }
+
+function loadSky() {
+  const ra = sexaToDeg(raH.value, raM.value, raS.value);
+  const dec = dmsToDeg(decD.value, decM.value, decS.value);
+  const fov = parseFloat(fovEl.value) || 10.0;
+  const rot = parseFloat(rotationEl.value) || 0;
+  const hips = encodeURIComponent(document.getElementById('surveySelect').value);
+
+  // --- Pixel preset vs custom handling ---
+  const preset = document.getElementById('pixelPreset').value;
+  const imgSizeInput = document.getElementById('imgSize');
+  let imgSize;
+
+  if (preset === "custom") {
+    imgSize = parseInt(imgSizeInput.value, 10) || 900;
+  } else {
+    imgSize = parseInt(preset, 10); // 600, 1200, or 2400
+  }
+
+  // Clamp within safe range (don’t exceed server limits)
+  imgSize = Math.max(128, Math.min(3000, imgSize));
+
+  console.log("Loading sky with:", { ra, dec, fov, rot, imgSize });
+
+  const url = `https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=${hips}&ra=${ra}&dec=${dec}&width=${imgSize}&height=${imgSize}&fov=${fov}&rotation=${rot}&format=jpg`;
+
+  spinner.style.display = 'block';
+  sky.src = url;
+}
+
+
+function updateOverlay() {
+  if (!sky.complete || !sky.naturalWidth) return;
+
+  const focal = parseFloat(focalEl.value) || 270;
+
+  // --- Use custom inputs if "Custom" is selected ---
+  let main, guide;
+  if (mainPresetEl.value === 'Custom') {
+    main = {
+      w: parseFloat(document.getElementById('mainCustomW').value) || 0,
+      h: parseFloat(document.getElementById('mainCustomH').value) || 0,
+      pix: parseFloat(document.getElementById('mainCustomPix').value) || 1
+    };
+  } else {
+    main = mainPresets[mainPresetEl.value];
+  }
+
+  if (guidePresetEl.value === 'Custom') {
+    guide = {
+      w: parseFloat(document.getElementById('guideCustomW').value) || 0,
+      h: parseFloat(document.getElementById('guideCustomH').value) || 0,
+      pix: parseFloat(document.getElementById('guideCustomPix').value) || 1
+    };
+  } else {
+    guide = guidePresets[guidePresetEl.value];
+  }
+
+  // sensor physical sizes (mm)
+  const mainWmm = main.w * main.pix / 1000;
+  const mainHmm = main.h * main.pix / 1000;
+  const guideWmm = guide.w * guide.pix / 1000;
+  const guideHmm = guide.h * guide.pix / 1000;
+
+  // FOV (deg) per side of each sensor
+  const mainFovWdeg = angularSizeDeg(mainWmm, focal);
+  const mainFovHdeg = angularSizeDeg(mainHmm, focal);
+  const guideFovWdeg = angularSizeDeg(guideWmm, focal);
+  const guideFovHdeg = angularSizeDeg(guideHmm, focal);
+
+  // Pixels per degree on the displayed sky image
+  const skyRect = sky.getBoundingClientRect();
+  const viewRect = viewer.getBoundingClientRect();
+  const skyFovDeg = parseFloat(fovEl.value) || 10.0;
+  const pxPerDeg = skyRect.width / skyFovDeg;
+
+  // Overlay sizes in screen px
+  const mainWpx = mainFovWdeg * pxPerDeg;
+  const mainHpx = mainFovHdeg * pxPerDeg;
+  const guideWpx = guideFovWdeg * pxPerDeg;
+  const guideHpx = guideFovHdeg * pxPerDeg;
+
+// Center of viewer
+const cx = viewRect.width / 2;
+const cy = viewRect.height / 2;
+
+
+  // Rotation (deg) for overlays
+  const rot = parseFloat(rotationEl.value) || 0;
+
+  // Apply sizes and center position to main overlay
+  mainOverlay.style.width = mainWpx + 'px';
+  mainOverlay.style.height = mainHpx + 'px';
+  mainOverlay.style.left = cx + 'px';
+  mainOverlay.style.top = cy + 'px';
+  mainOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+
+  // Guide overlay size
+  guideOverlay.style.width = guideWpx + 'px';
+  guideOverlay.style.height = guideHpx + 'px';
+
+  // Offset in mm -> degrees -> pixels, then rotate by camera rotation
+  const offXmm = parseFloat(guideOffX.value) || 0;
+  const offYmm = parseFloat(guideOffY.value) || 0;
+  const offXdeg = (offXmm / focal) * DEG_PER_RAD;
+  const offYdeg = (offYmm / focal) * DEG_PER_RAD;
+  const offXpx = offXdeg * pxPerDeg;
+  const offYpx = offYdeg * pxPerDeg;
+
+  const th = (rot * Math.PI) / 180;
+  const offRotX = offXpx * Math.cos(th) - offYpx * Math.sin(th);
+  const offRotY = offXpx * Math.sin(th) + offYpx * Math.cos(th);
+
+  guideOverlay.style.left = (cx + offRotX) + 'px';
+  guideOverlay.style.top = (cy + offRotY) + 'px';
+  guideOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+
+  // Readouts
+  const mainScale = arcsecPerPixel(main.pix, focal).toFixed(2);
+  const guideScale = arcsecPerPixel(guide.pix, focal).toFixed(2);
+  mainInfo.textContent = `Main FOV: ${mainFovWdeg.toFixed(2)}° × ${mainFovHdeg.toFixed(2)}° | ${mainScale}"/px`;
+  guideInfo.textContent = `Guide FOV: ${guideFovWdeg.toFixed(2)}° × ${guideFovHdeg.toFixed(2)}° | ${guideScale}"/px`;
+  scaleInfo.textContent = `Sky: ${skyFovDeg}° across, ${pxPerDeg.toFixed(1)} px/° (display)`;
+}
+
+
+   function nudgeRA(dir){
+  let h = parseInt(raH.value) || 0;
+  let m = parseInt(raM.value) || 0;
+  let s = parseInt(raS.value) || 0;
+
+  // Nudge minutes of RA time
+  m += dir;
+
+  // Normalize minutes into range [0,59], adjusting hours
+  if (m < 0) {
+    m = 59;
+    h -= 1;
+  }
+  if (m > 59) {
+    m = 0;
+    h += 1;
+  }
+
+  // Wrap hours into [0,23]
+  if (h < 0) h = 23;
+  if (h > 23) h = 0;
+
+  raH.value = h;
+  raM.value = m;
+  raS.value = s; // seconds unchanged
+
+  loadSky();
+}
+
+    function nudgeDec(dir){
+      let dec = dmsToDeg(decD.value, decM.value, decS.value);
+      dec += dir/60;
+      if(dec>90) dec=90; if(dec<-90) dec=-90;
+      const sign = dec<0?-1:1; const adec=Math.abs(dec);
+      const d=Math.floor(adec); const m=Math.floor((adec-d)*60); const s=(((adec-d)*60-m)*60).toFixed(2);
+      decD.value=(sign<0?'-':'')+d; decM.value=m; decS.value=s;
+      loadSky();
+    }
+
+    // react to changes (survey removed)
+    [fovEl, rotationEl, mainPresetEl, guidePresetEl, focalEl, guideOffX, guideOffY, imgSizeEl]
+      .forEach(el => el.addEventListener('input', () => requestAnimationFrame(updateOverlay)));
+
+    sky.onload = () => { spinner.style.display = 'none'; updateOverlay(); };
+    sky.onerror = () => { spinner.style.display = 'none'; alert('Failed to load sky image. Try a different position.'); };
+    window.addEventListener('resize', () => requestAnimationFrame(updateOverlay));
+
+    // --- Exactly 100 objects: Messier M1–M100 (names only in dropdown) ---
+   const messier100 = [
+	{ id: 'M1 (Crab Nebula)', ra:[5,34,0], dec:[+22,1,0] },
+  	{ id: 'M2 (Globular Cluster in Aquarius)', ra:[21,33,0], dec:[-0,49,0] },
+ 	{ id: 'M3 (Globular Cluster in Canes Venatici)', ra:[13,42,0], dec:[+28,23,0] },
+  	{ id: 'M13 (Hercules Cluster)', ra:[16,41,41], dec:[+36,27,36] },
+  	{ id: 'M31 (Andromeda Galaxy)', ra:[0,42,44], dec:[+41,16,9] },
+  	{ id: 'M33 (Triangulum Galaxy)', ra:[1,33,51], dec:[+30,39,37] },
+  	{ id: 'M42 (Orion Nebula)', ra:[5,35,17], dec:[-5,23,28] },
+  	{ id: 'M45 (Pleiades)', ra:[3,47,0], dec:[+24,7,0] },
+  	{ id: 'M51 (Whirlpool Galaxy)', ra:[13,29,53], dec:[+47,11,43] },
+	{ id: 'M57 (Ring Nebula)', ra:[18,53,35], dec:[+33,1,45] },
+ 	{   id: 'M81 (Bode’s Galaxy)', ra:[9,55,33], dec:[+69,3,55] },
+  	{   id: 'M82 (Cigar Galaxy)', ra:[9,55,53], dec:[+69,40,47] },
+  	{   id: 'M101 (Pinwheel Galaxy)', ra:[14,3,13], dec:[+54,21,0] },
+  	{ id: 'NGC253 (Sculptor Galaxy)', ra:[0,47,33], dec:[-25,17,18] },
+  { id: 'NGC7000 (North America Nebula)', ra:[20,58,54], dec:[+44,20,0] },
+  { id: 'IC1805 (Heart Nebula)', ra:[2,32,42], dec:[+61,27,0] },
+  { id: 'IC1848 (Soul Nebula)', ra:[2,51,36], dec:[+60,26,0] },
+  { id: 'NGC2237 (Rosette Nebula)', ra:[6,31,55], dec:[+4,56,34] },
+  { id: 'NGC6992 (Eastern Veil Nebula)', ra:[20,56,18], dec:[+31,43,0] },
+  { id: 'NGC6888 (Crescent Nebula)', ra:[20,12,7], dec:[+38,21,18] },
+{ id: 'M5 (Globular Cluster in Serpens)', ra:[15,18,33], dec:[+2,4,58] },
+  { id: 'M8 (Lagoon Nebula)', ra:[18,3,37], dec:[-24,23,12] },
+  { id: 'M10 (Globular Cluster in Ophiuchus)', ra:[16,57,9], dec:[-4,6,1] },
+{ id: 'M11 (Wild Duck Cluster)', ra:[18,51,5], dec:[-6,16,13] },
+  { id: 'M12 (Globular Cluster in Ophiuchus)', ra:[16,47,14], dec:[-1,56,54] },
+  { id: 'M14 (Globular Cluster in Ophiuchus)', ra:[17,37,36], dec:[-3,14,45] },
+  { id: 'M15 (Globular Cluster in Pegasus)', ra:[21,29,58], dec:[+12,10,1] },
+  { id: 'M16 (Eagle Nebula)', ra:[18,18,48], dec:[-13,49,0] },
+  { id: 'M17 (Omega Nebula)', ra:[18,20,47], dec:[-16,10,18] },
+  { id: 'M18 (Open Cluster in Sagittarius)', ra:[18,19,58], dec:[-17,6,6] },
+  { id: 'M20 (Trifid Nebula)', ra:[18,2,23], dec:[-23,1,48] },
+  { id: 'M22 (Sagittarius Cluster)', ra:[18,36,24], dec:[-23,54,12] },
+  { id: 'M27 (Dumbbell Nebula)', ra:[19,59,36], dec:[+22,43,16] },
+  { id: 'M29 (Open Cluster in Cygnus)', ra:[20,23,57], dec:[+38,30,30] },
+  { id: 'M34 (Open Cluster in Perseus)', ra:[2,42,0], dec:[+42,47,0] },
+  { id: 'M35 (Open Cluster in Gemini)', ra:[6,9,0], dec:[+24,21,0] },
+ { id: 'M36 (Open Cluster in Auriga)', ra:[5,36,18], dec:[+34,8,24] },
+  { id: 'M37 (Open Cluster in Auriga)', ra:[5,52,18], dec:[+32,33,12] },
+  { id: 'M38 (Open Cluster in Auriga)', ra:[5,28,42], dec:[+35,50,54] },
+  { id: 'M39 (Open Cluster in Cygnus)', ra:[21,31,48], dec:[+48,26,0] },
+  { id: 'M40 (Double Star in Ursa Major)', ra:[12,22,12], dec:[+58,5,0] },
+  { id: 'M46 (Open Cluster with Planetary Nebula NGC2438)', ra:[7,41,46], dec:[-14,49,0] },
+  { id: 'M47 (Open Cluster in Puppis)', ra:[7,36,36], dec:[-14,30,0] },
+  { id: 'M48 (Open Cluster in Hydra)', ra:[8,13,48], dec:[-5,48,0] },
+  { id: 'M49 (Elliptical Galaxy in Virgo)', ra:[12,29,46], dec:[+8,0,2] },
+  { id: 'M50 (Open Cluster in Monoceros)', ra:[7,3,0], dec:[-8,20,0] },
+  { id: 'M52 (Open Cluster in Cassiopeia)', ra:[23,24,48], dec:[+61,35,36] },
+  { id: 'M56 (Globular Cluster in Lyra)', ra:[19,16,36], dec:[+30,11,0] },
+  { id: 'M58 (Barred Spiral Galaxy in Virgo)', ra:[12,37,44], dec:[+11,49,5] },
+  { id: 'M59 (Elliptical Galaxy in Virgo)', ra:[12,42,2], dec:[+11,38,48] },
+  { id: 'M60 (Elliptical Galaxy in Virgo)', ra:[12,43,40], dec:[+11,33,9] },
+  { id: 'M63 (Sunflower Galaxy)', ra:[13,15,49], dec:[+42,1,45] },
+  { id: 'M64 (Black Eye Galaxy)', ra:[12,56,43], dec:[+21,41,0] },
+ { id: 'M65 (Spiral Galaxy in Leo)', ra:[11,18,55], dec:[+13,5,32] },
+  { id: 'M66 (Spiral Galaxy in Leo)', ra:[11,20,15], dec:[+12,59,30] },
+  { id: 'M71 (Globular Cluster in Sagitta)', ra:[19,53,47], dec:[+18,46,45] },
+  { id: 'M74 (Phantom Galaxy)', ra:[1,36,42], dec:[+15,47,0] },
+  { id: 'M76 (Little Dumbbell Nebula)', ra:[1,42,18], dec:[+51,34,31] },
+  { id: 'M78 (Reflection Nebula in Orion)', ra:[5,46,46], dec:[+0,3,0] },
+  { id: 'M87 (Virgo A Galaxy)', ra:[12,30,49], dec:[+12,23,28] },
+  { id: 'M92 (Globular Cluster in Hercules)', ra:[17,17,7], dec:[+43,8,12] },
+  { id: 'M94 (Croc’s Eye Galaxy)', ra:[12,50,53], dec:[+41,7,12] },
+  { id: 'M97 (Owl Nebula)', ra:[11,14,48], dec:[+55,1,0] },
+  { id: 'M104 (Sombrero Galaxy)', ra:[12,39,59], dec:[-11,37,23] },
+  { id: 'M106 (Spiral Galaxy in Canes Venatici)', ra:[12,18,57], dec:[+47,18,14] },
+  { id: 'M108 (Surfboard Galaxy)', ra:[11,11,31], dec:[+55,40,30] },
+  { id: 'M109 (Barred Spiral Galaxy in Ursa Major)', ra:[11,57,36], dec:[+53,23,14] },
+  { id: 'NGC891 (Edge-On Galaxy in Andromeda)', ra:[2,22,33], dec:[+42,20,57] },
+  { id: 'NGC7635 (Bubble Nebula)', ra:[23,20,48], dec:[+61,12,6] },
+  { id: 'NGC281 (Pacman Nebula)', ra:[0,52,48], dec:[+56,37,0] },
+  { id: 'NGC2024 (Flame Nebula)', ra:[5,41,54], dec:[-1,51,0] },
+  { id: 'NGC2174 (Monkey Head Nebula)', ra:[6,9,24], dec:[+20,39,0] },
+  { id: 'NGC2403 (Galaxy in Camelopardalis)', ra:[7,36,51], dec:[+65,36,9] },
+  { id: 'NGC2903 (Galaxy in Leo)', ra:[9,32,10], dec:[+21,30,3] },
+  { id: 'NGC3521 (Galaxy in Leo)', ra:[11,5,49], dec:[-0,2,0] },
+  { id: 'NGC4565 (Needle Galaxy)', ra:[12,36,21], dec:[+25,59,15] },
+  { id: 'NGC4631 (Whale Galaxy)', ra:[12,42,8], dec:[+32,32,29] },
+  { id: 'NGC4656 (Hockey Stick Galaxy)', ra:[12,43,57], dec:[+32,10,7] },
+  { id: 'NGC5128 (Centaurus A)', ra:[13,25,27], dec:[-43,1,9] },
+  { id: 'NGC5139 (Omega Centauri)', ra:[13,26,46], dec:[-47,28,37] },
+  { id: 'NGC6744 (Spiral Galaxy in Pavo)', ra:[19,9,46], dec:[-63,51,27] },
+  { id: 'NGC6357 (Lobster Nebula)', ra:[17,25,9], dec:[-34,12,0] },
+  { id: 'NGC6334 (Cat’s Paw Nebula)', ra:[17,20,48], dec:[-36,6,0] },
+  { id: 'NGC6188 (Rim Nebula)', ra:[16,40,0], dec:[-48,46,0] },
+  { id: 'NGC602 (Star Cluster in SMC)', ra:[1,29,30], dec:[-73,33,0] },
+  { id: 'IC434 (Horsehead Nebula)', ra:[5,41,0], dec:[-2,27,0] },
+  { id: 'IC2944 (Running Chicken Nebula)', ra:[11,38,30], dec:[-59,24,0] },
+  { id: 'IC5067 (Pelican Nebula)', ra:[20,50,48], dec:[+44,20,0] },
+  { id: 'IC1396 (Elephant Trunk Nebula)', ra:[21,39,0], dec:[+57,30,0] },
+  { id: 'IC2177 (Seagull Nebula)', ra:[7,4,0], dec:[-10,27,0] },
+  { id: 'LBN762 (Drunken Dragon / Drifting Ghost Nebula)', ra:[21,2,0], dec:[+16,7,0] },
+  { id: 'Sh2-101 (Tulip Nebula)', ra:[20,0,24], dec:[+33,48,0] },
+  { id: 'Barnard33 (Horsehead Dark Nebula)', ra:[5,41,0], dec:[-2,27,0] },
+  { id: 'LMC (Large Magellanic Cloud)', ra:[5,23,34], dec:[-69,45,22] },
+  { id: 'SMC (Small Magellanic Cloud)', ra:[0,52,44], dec:[-72,49,43] }
+];
+
+    // Fill dropdown with names only
+    (function populateObjects(){
+      messier100.forEach(obj => {
+        const o = document.createElement('option');
+        o.value = obj.id;
+        o.textContent = obj.id;
+        objectSelect.appendChild(o);
+      });
+    })();
+
+    // When an object is selected, set RA/Dec and load sky
+    function setCoordsFromObject(id){
+      const obj = messier100.find(o => o.id === id);
+      if(!obj) return;
+      const [rh, rm, rs] = obj.ra; const [dd, dm, ds] = obj.dec;
+      raH.value = String(rh);
+      raM.value = String(rm);
+      raS.value = String(rs||0);
+      decD.value = (dd>=0? '' : '-') + String(Math.abs(dd));
+      decM.value = String(dm||0);
+      decS.value = String(ds||0);
+      loadSky();
+    }
+    objectSelect.addEventListener('change', () => {
+      if(objectSelect.value) setCoordsFromObject(objectSelect.value);
+    });
+
+// --- Initial setup ---
+document.getElementById('resetDuo').click();
+loadSky();
+
+// --- Live panning that locks RA/Dec ---
+let isDragging = false;
+let startX = 0, startY = 0;
+let currentOffsetX = 0, currentOffsetY = 0;
+let tempOffsetX = 0, tempOffsetY = 0;
+let isLoading = false;
+
+function applyOffset() {
+  const totalX = currentOffsetX + tempOffsetX;
+  const totalY = currentOffsetY + tempOffsetY;
+  sky.style.transform = `translate(calc(-50% + ${totalX}px), calc(-50% + ${totalY}px))`;
+
+  const rot = parseFloat(rotationEl.value) || 0;
+  mainOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+  guideOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+}
+
+function commitDrag(dx, dy) {
+  if (isLoading) return;
+
+  let raDeg = sexaToDeg(raH.value, raM.value, raS.value);
+  let decDeg = dmsToDeg(decD.value, decM.value, decS.value);
+
+  const skyRect = sky.getBoundingClientRect();
+  const skyFovDeg = parseFloat(fovEl.value) || 10.0;
+  const pxPerDeg = skyRect.width / skyFovDeg;
+  const decRad = decDeg * Math.PI / 180;
+
+  const dRAdeg = dx / (pxPerDeg * Math.cos(decRad));
+  const dDecDeg = dy / pxPerDeg;
+
+  raDeg = (raDeg + dRAdeg + 360) % 360;
+  decDeg = Math.max(-90, Math.min(90, decDeg + dDecDeg));
+
+  const raHours = raDeg / 15;
+  raH.value = Math.floor(raHours);
+  raM.value = Math.floor((raHours % 1) * 60);
+  raS.value = ((raHours * 3600) % 60).toFixed(1);
+
+  const sign = decDeg < 0 ? -1 : 1;
+  const adec = Math.abs(decDeg);
+  decD.value = (sign < 0 ? '-' : '') + Math.floor(adec);
+  decM.value = Math.floor((adec % 1) * 60);
+  decS.value = ((adec * 3600) % 60).toFixed(1);
+
+  // Update current offset and reset temp offsets
+  currentOffsetX = 0;
+  currentOffsetY = 0;
+  tempOffsetX = 0;
+  tempOffsetY = 0;
+
+  // Reload sky image
+  isLoading = true;
+  const hips = encodeURIComponent(document.getElementById('surveySelect').value);
+  const fov = parseFloat(fovEl.value) || 10.0;
+  const size = Math.max(128, Math.min(2048, parseInt(imgSizeEl.value) || 600));
+  const rot = parseFloat(rotationEl.value) || 0;
+  const newSkyURL = `https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=${hips}&ra=${raDeg}&dec=${decDeg}&width=${size}&height=${size}&fov=${fov}&rotation=${rot}&format=jpg`;
+
+  spinner.style.display = 'block';
+  const newImg = new Image();
+  newImg.onload = () => {
+    sky.src = newImg.src;
+    isLoading = false;
+    spinner.style.display = 'none';
+    applyOffset(); // just reapply transform with zero offsets
+  };
+  newImg.src = newSkyURL;
+}
+
+// --- Pointer events ---
+viewer.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return; // left click only
+  isDragging = true;
+  startX = e.clientX;
+  startY = e.clientY;
+  tempOffsetX = 0;
+  tempOffsetY = 0;
+  sky.classList.add('dragging');
+  viewer.setPointerCapture(e.pointerId);
+});
+
+viewer.addEventListener('pointermove', e => {
+  if (!isDragging || isLoading) return;
+  tempOffsetX = e.clientX - startX;
+  tempOffsetY = e.clientY - startY;
+  applyOffset();
+});
+
+viewer.addEventListener('pointerup', e => {
+  if (!isDragging) return;
+  isDragging = false;
+  sky.classList.remove('dragging');
+  commitDrag(tempOffsetX, tempOffsetY);
+  viewer.releasePointerCapture(e.pointerId);
+});
+
+viewer.addEventListener('pointercancel', e => {
+  if (!isDragging) return;
+  isDragging = false;
+  sky.classList.remove('dragging');
+  tempOffsetX = 0;
+  tempOffsetY = 0;
+  applyOffset();
+  viewer.releasePointerCapture(e.pointerId);
+});
+
+  </script>
+</body>
+</html>
   <style>
     :root{--bg:#0b0b0f;--panel:#121219;--ink:#e8e8ef;--muted:#9aa4b2;--accent:#7dd3fc;--red:#ef4444;--green:#22c55e}
     *{box-sizing:border-box}
@@ -792,3 +1571,4 @@ window.addEventListener('touchend', e => {
   </script>
 </body>
 </html>
+
