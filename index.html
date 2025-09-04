@@ -686,7 +686,7 @@ function applyOffset() {
   guideOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
 }
 
-
+// --- Mouse events ---
 viewer.addEventListener('mousedown', e => {
   isDragging = true;
   startX = e.clientX;
@@ -705,13 +705,38 @@ window.addEventListener('mousemove', e => {
 
 window.addEventListener('mouseup', e => {
   if (!isDragging) return;
+  endDrag(tempOffsetX, tempOffsetY);
+});
+
+// --- Touch events ---
+viewer.addEventListener('touchstart', e => {
+  if (e.touches.length !== 1) return; // ignore multi-touch
+  isDragging = true;
+  startX = e.touches[0].clientX;
+  startY = e.touches[0].clientY;
+  tempOffsetX = 0;
+  tempOffsetY = 0;
+  sky.classList.add('dragging');
+});
+
+window.addEventListener('touchmove', e => {
+  if (!isDragging || e.touches.length !== 1) return;
+  tempOffsetX = e.touches[0].clientX - startX;
+  tempOffsetY = e.touches[0].clientY - startY;
+  applyOffset();
+});
+
+window.addEventListener('touchend', e => {
+  if (!isDragging) return;
+  endDrag(tempOffsetX, tempOffsetY);
+});
+
+// --- Shared drag-end logic ---
+function endDrag(dx, dy) {
   isDragging = false;
   sky.classList.remove('dragging');
 
-  const dx = tempOffsetX;
-  const dy = tempOffsetY;
-
-  // Convert to RA/Dec changes...
+  // Convert to RA/Dec changes
   let raDeg = sexaToDeg(raH.value, raM.value, raS.value);
   let decDeg = dmsToDeg(decD.value, decM.value, decS.value);
 
@@ -727,7 +752,7 @@ window.addEventListener('mouseup', e => {
   decDeg += dDecDeg;
   decDeg = Math.max(-90, Math.min(90, decDeg));
 
-  // Update RA/Dec inputs (same as before)
+  // Update RA/Dec inputs
   const raHours = raDeg / 15;
   raH.value = Math.floor(raHours);
   raM.value = Math.floor((raHours % 1) * 60);
@@ -760,33 +785,7 @@ window.addEventListener('mouseup', e => {
     applyOffset();
   };
   newImg.src = newSkyURL;
-// --- Touchscreen drag support ---
-viewer.addEventListener('touchstart', (e) => {
-  if (e.touches.length !== 1) return; // ignore multi-touch
-  isDragging = true;
-  startX = e.touches[0].clientX;
-  startY = e.touches[0].clientY;
-  sky.classList.add('dragging');
-});
-
-viewer.addEventListener('touchmove', (e) => {
-  if (!isDragging || e.touches.length !== 1) return;
-  const dx = e.touches[0].clientX - startX;
-  const dy = e.touches[0].clientY - startY;
-
-  viewer.scrollLeft -= dx;
-  viewer.scrollTop -= dy;
-
-  startX = e.touches[0].clientX;
-  startY = e.touches[0].clientY;
-});
-
-viewer.addEventListener('touchend', () => {
-  isDragging = false;
-  sky.classList.remove('dragging');
-});
-
-});
+}
 
 // --- Service Worker registration ---
 if ("serviceWorker" in navigator) {
