@@ -9,7 +9,7 @@
     *{box-sizing:border-box}
     body{margin:0;height:100vh;display:flex;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
     #controls{width:310px;max-width:40vw;background:var(--panel);padding:12px 12px 16px;overflow:auto;border-right:1px solid #1f2937}
-    #controls h3{margin:0 0 8px;font-size:16px;font-weight:600}
+    #controls h3{margin:0 0 8px;font-size:16px;font-weight:1000}
     #controls label{display:block;margin:6px 0 4px;font-size:12px;color:var(--muted)}
     #controls input, #controls select{width:100%;padding:6px 8px;border-radius:8px;border:1px solid #374151;background:#0f1116;color:var(--ink)}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
@@ -143,9 +143,9 @@
   <div>
     <label>Pixel size preset</label>
     <select id="pixelPreset">
-      <option value="600">Low (600 px)</option>
-      <option value="1200">Medium (1200 px)</option>
-      <option value="2400">High (2400 px)</option>
+      <option value="800">Low (800 px)</option>
+      <option value="1400">Medium (1400 px)</option>
+      <option value="2800">High (2800 px)</option>
       <option value="custom">Custom</option>
     </select>
   </div>
@@ -154,7 +154,7 @@
 <!-- Custom input is hidden until "Custom" is chosen -->
 <div id="customSizeContainer" style="display:none; margin-top:8px;">
   <label>Custom image size (px)</label>
-  <input id="imgSize" type="number" step="1" value="900" />
+  <input id="imgSize" type="number" step="1" value="1000" />
 </div>
     <label>Guide offset (mm) — center relative to main</label>
     <div class="row">
@@ -301,7 +301,7 @@ document.getElementById('pixelPreset').addEventListener('change', (e) => {
     customBox.style.display = "block";
   } else {
     customBox.style.display = "none";
-    imgSizeEl.value = val;  // store the selected preset (600, 1200, 2400)
+    imgSizeEl.value = val;  // store the selected preset (800, 1400, 2800)
   }
 });
 
@@ -379,9 +379,9 @@ function loadSky() {
   let imgSize;
 
   if (preset === "custom") {
-    imgSize = parseInt(imgSizeInput.value, 10) || 900;
+    imgSize = parseInt(imgSizeInput.value, 10) || 1000;
   } else {
-    imgSize = parseInt(preset, 10); // 600, 1200, or 2400
+    imgSize = parseInt(preset, 10); // 800, 1400, or 2800
   }
 
   // Clamp within safe range (don’t exceed server limits)
@@ -748,7 +748,7 @@ window.addEventListener('mouseup', e => {
   // Load new sky image
   const url = encodeURIComponent(document.getElementById('surveySelect').value);
   const fov = parseFloat(fovEl.value) || 10.0;
-  const size = Math.max(128, Math.min(2048, parseInt(imgSizeEl.value)||600));
+  const size = Math.max(128, Math.min(2048, parseInt(imgSizeEl.value)||1000));
   const rot = parseFloat(rotationEl.value)||0;
   const newSkyURL = `https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=${url}&ra=${raDeg}&dec=${decDeg}&width=${size}&height=${size}&fov=${fov}&rotation=${rot}&format=jpg`;
 
@@ -760,6 +760,32 @@ window.addEventListener('mouseup', e => {
     applyOffset();
   };
   newImg.src = newSkyURL;
+// --- Touchscreen drag support ---
+viewer.addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 1) return; // ignore multi-touch
+  isDragging = true;
+  startX = e.touches[0].clientX;
+  startY = e.touches[0].clientY;
+  sky.classList.add('dragging');
+});
+
+viewer.addEventListener('touchmove', (e) => {
+  if (!isDragging || e.touches.length !== 1) return;
+  const dx = e.touches[0].clientX - startX;
+  const dy = e.touches[0].clientY - startY;
+
+  viewer.scrollLeft -= dx;
+  viewer.scrollTop -= dy;
+
+  startX = e.touches[0].clientX;
+  startY = e.touches[0].clientY;
+});
+
+viewer.addEventListener('touchend', () => {
+  isDragging = false;
+  sky.classList.remove('dragging');
+});
+
 });
 
 // --- Service Worker registration ---
