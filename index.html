@@ -721,6 +721,7 @@ viewer.addEventListener('touchstart', e => {
 
 window.addEventListener('touchmove', e => {
   if (!isDragging || e.touches.length !== 1) return;
+  e.preventDefault(); // prevent page scroll while dragging
   tempOffsetX = e.touches[0].clientX - startX;
   tempOffsetY = e.touches[0].clientY - startY;
   applyOffset();
