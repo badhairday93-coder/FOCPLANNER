@@ -673,21 +673,45 @@ let isDragging = false;
 let startX = 0, startY = 0;
 let currentOffsetX = 0, currentOffsetY = 0;
 let tempOffsetX = 0, tempOffsetY = 0;
-let isLoading = false;
 
 function applyOffset() {
+  // Move sky according to drag
   const totalX = currentOffsetX + tempOffsetX;
   const totalY = currentOffsetY + tempOffsetY;
   sky.style.transform = `translate(calc(-50% + ${totalX}px), calc(-50% + ${totalY}px))`;
 
-  const rot = parseFloat(rotationEl.value) || 0;
+  // Keep overlays centered regardless of drag
+  const rot = rotationEl.value || 0;
   mainOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
   guideOverlay.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
 }
 
-function commitDrag(dx, dy) {
-  if (isLoading) return;
 
+viewer.addEventListener('mousedown', e => {
+  isDragging = true;
+  startX = e.clientX;
+  startY = e.clientY;
+  tempOffsetX = 0;
+  tempOffsetY = 0;
+  sky.classList.add('dragging');
+});
+
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  tempOffsetX = e.clientX - startX;
+  tempOffsetY = e.clientY - startY;
+  applyOffset();
+});
+
+window.addEventListener('mouseup', e => {
+  if (!isDragging) return;
+  isDragging = false;
+  sky.classList.remove('dragging');
+
+  const dx = tempOffsetX;
+  const dy = tempOffsetY;
+
+  // Convert to RA/Dec changes...
   let raDeg = sexaToDeg(raH.value, raM.value, raS.value);
   let decDeg = dmsToDeg(decD.value, decM.value, decS.value);
 
@@ -700,83 +724,50 @@ function commitDrag(dx, dy) {
   const dDecDeg = dy / pxPerDeg;
 
   raDeg = (raDeg + dRAdeg + 360) % 360;
-  decDeg = Math.max(-90, Math.min(90, decDeg + dDecDeg));
+  decDeg += dDecDeg;
+  decDeg = Math.max(-90, Math.min(90, decDeg));
 
+  // Update RA/Dec inputs (same as before)
   const raHours = raDeg / 15;
   raH.value = Math.floor(raHours);
   raM.value = Math.floor((raHours % 1) * 60);
-  raS.value = ((raHours * 3600) % 60).toFixed(1);
+  raS.value = (((raHours * 3600) % 60).toFixed(1));
 
   const sign = decDeg < 0 ? -1 : 1;
   const adec = Math.abs(decDeg);
   decD.value = (sign < 0 ? '-' : '') + Math.floor(adec);
   decM.value = Math.floor((adec % 1) * 60);
-  decS.value = ((adec * 3600) % 60).toFixed(1);
+  decS.value = (((adec * 3600) % 60).toFixed(1));
 
-  // Update current offset and reset temp offsets
+  // Commit drag
   currentOffsetX = 0;
   currentOffsetY = 0;
   tempOffsetX = 0;
   tempOffsetY = 0;
 
-  // Reload sky image
-  isLoading = true;
-  const hips = encodeURIComponent(document.getElementById('surveySelect').value);
+  // Load new sky image
+  const url = encodeURIComponent(document.getElementById('surveySelect').value);
   const fov = parseFloat(fovEl.value) || 10.0;
-  const size = Math.max(128, Math.min(2048, parseInt(imgSizeEl.value) || 600));
-  const rot = parseFloat(rotationEl.value) || 0;
-  const newSkyURL = `https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=${hips}&ra=${raDeg}&dec=${decDeg}&width=${size}&height=${size}&fov=${fov}&rotation=${rot}&format=jpg`;
+  const size = Math.max(128, Math.min(2048, parseInt(imgSizeEl.value)||600));
+  const rot = parseFloat(rotationEl.value)||0;
+  const newSkyURL = `https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=${url}&ra=${raDeg}&dec=${decDeg}&width=${size}&height=${size}&fov=${fov}&rotation=${rot}&format=jpg`;
 
   spinner.style.display = 'block';
   const newImg = new Image();
   newImg.onload = () => {
     sky.src = newImg.src;
-    isLoading = false;
     spinner.style.display = 'none';
-    applyOffset(); // just reapply transform with zero offsets
+    applyOffset();
   };
   newImg.src = newSkyURL;
+});
+
+// --- Service Worker registration ---
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(reg => console.log("Service worker registered", reg.scope))
+    .catch(err => console.error("SW registration failed", err));
 }
-
-// --- Pointer events ---
-viewer.addEventListener('pointerdown', e => {
-e.preventDefault(); // ← crucial for touch
-  if (e.pointerType === 'mouse' && e.button !== 0) return; // left click only
-  isDragging = true;
-  startX = e.clientX;
-  startY = e.clientY;
-  tempOffsetX = 0;
-  tempOffsetY = 0;
-  sky.classList.add('dragging');
-  viewer.setPointerCapture(e.pointerId);
-});
-
-viewer.addEventListener('pointermove', e => {
-e.preventDefault(); // ← prevents page scroll/zoom during drag
-  if (!isDragging || isLoading) return;
-  tempOffsetX = e.clientX - startX;
-  tempOffsetY = e.clientY - startY;
-  applyOffset();
-});
-
-viewer.addEventListener('pointerup', e => {
-  if (!isDragging) return;
-  isDragging = false;
-  sky.classList.remove('dragging');
-  commitDrag(tempOffsetX, tempOffsetY);
-  viewer.releasePointerCapture(e.pointerId);
-});
-
-viewer.addEventListener('pointercancel', e => {
-  if (!isDragging) return;
-  isDragging = false;
-  sky.classList.remove('dragging');
-  tempOffsetX = 0;
-  tempOffsetY = 0;
-  applyOffset();
-  viewer.releasePointerCapture(e.pointerId);
-});
-
   </script>
 </body>
 </html>
