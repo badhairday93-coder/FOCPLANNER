@@ -725,7 +725,7 @@ window.addEventListener('touchmove', e => {
   tempOffsetX = e.touches[0].clientX - startX;
   tempOffsetY = e.touches[0].clientY - startY;
   applyOffset();
-});
+}, { passive: false }); // passive: false is required
 
 window.addEventListener('touchend', e => {
   if (!isDragging) return;
