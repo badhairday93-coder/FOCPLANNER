@@ -673,7 +673,7 @@ let isDragging = false;
 let startX = 0, startY = 0;
 let currentOffsetX = 0, currentOffsetY = 0;
 let tempOffsetX = 0, tempOffsetY = 0;
-let lastTouchTime = 0;
+let isTouchDevice = false; // prevents mouse events after touch
 
 function applyOffset() {
   const totalX = currentOffsetX + tempOffsetX;
@@ -716,7 +716,6 @@ function commitDrag(dx, dy) {
   tempOffsetX = 0;
   tempOffsetY = 0;
 
-  // Load new sky image
   const url = encodeURIComponent(document.getElementById('surveySelect').value);
   const fov = parseFloat(fovEl.value) || 10.0;
   const size = Math.max(128, Math.min(2048, parseInt(imgSizeEl.value) || 600));
@@ -733,7 +732,7 @@ function commitDrag(dx, dy) {
   newImg.src = newSkyURL;
 }
 
-// --- Unified handlers ---
+// --- Unified drag logic ---
 function startDrag(x, y) {
   isDragging = true;
   startX = x;
@@ -757,19 +756,18 @@ function endDrag() {
   commitDrag(tempOffsetX, tempOffsetY);
 }
 
-// --- Mouse Events ---
+// --- Mouse events (only if not touch) ---
 viewer.addEventListener('mousedown', e => {
-  if (Date.now() - lastTouchTime < 500) return; // ignore mouse after touch
+  if (isTouchDevice) return;
   startDrag(e.clientX, e.clientY);
 });
+window.addEventListener('mousemove', e => { if (!isTouchDevice) moveDrag(e.clientX, e.clientY); });
+window.addEventListener('mouseup', e => { if (!isTouchDevice) endDrag(); });
 
-window.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
-window.addEventListener('mouseup', endDrag);
-
-// --- Touch Events (behaves exactly like mouse) ---
+// --- Touch events ---
 viewer.addEventListener('touchstart', e => {
   if (e.touches.length !== 1) return;
-  lastTouchTime = Date.now();
+  isTouchDevice = true; // flag to block mouse events
   const touch = e.touches[0];
   startDrag(touch.clientX, touch.clientY);
   e.preventDefault();
@@ -786,8 +784,6 @@ window.addEventListener('touchend', e => {
   endDrag();
   e.preventDefault();
 }, { passive: false });
-
-
 
 // --- Service Worker registration ---
 if ("serviceWorker" in navigator) {
