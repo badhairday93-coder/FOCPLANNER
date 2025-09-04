@@ -670,16 +670,11 @@ loadSky();
 
 // --- Live panning that locks RA/Dec ---
 let isDragging = false;
-let lastTouchTime = 0; // timestamp of last touch
 let startX = 0, startY = 0;
 let currentOffsetX = 0, currentOffsetY = 0;
 let tempOffsetX = 0, tempOffsetY = 0;
+let lastTouchTime = 0; // for ignoring mouse after touch
 
-// --- Helper to commit drag ---
-function commitDrag(dx, dy) {
-  // your existing code to convert dx/dy to RA/Dec
-  // ... (same as before)
-}
 function applyOffset() {
   const totalX = currentOffsetX + tempOffsetX;
   const totalY = currentOffsetY + tempOffsetY;
@@ -739,62 +734,60 @@ function commitDrag(dx, dy) {
   newImg.src = newSkyURL;
 }
 
-// --- Mouse events ---
-viewer.addEventListener('mousedown', e => {
-  if (Date.now() - lastTouchTime < 500) return; // ignore if touch was recent
+// --- Unified start/move/end functions ---
+function startDrag(x, y) {
   isDragging = true;
-  startX = e.clientX;
-  startY = e.clientY;
+  startX = x;
+  startY = y;
   tempOffsetX = 0;
   tempOffsetY = 0;
   sky.classList.add('dragging');
-});
+}
 
-window.addEventListener('mousemove', e => {
+function moveDrag(x, y) {
   if (!isDragging) return;
-  tempOffsetX = e.clientX - startX;
-  tempOffsetY = e.clientY - startY;
+  tempOffsetX = x - startX;
+  tempOffsetY = y - startY;
   applyOffset();
-});
+}
 
-window.addEventListener('mouseup', e => {
+function endDrag() {
   if (!isDragging) return;
   isDragging = false;
   sky.classList.remove('dragging');
   commitDrag(tempOffsetX, tempOffsetY);
+}
+
+// --- Mouse Events ---
+viewer.addEventListener('mousedown', e => {
+  if (Date.now() - lastTouchTime < 500) return; // ignore mouse after recent touch
+  startDrag(e.clientX, e.clientY);
 });
 
-// --- Touch events ---
+window.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+window.addEventListener('mouseup', endDrag);
+
+// --- Touch Events ---
 viewer.addEventListener('touchstart', e => {
   if (e.touches.length !== 1) return;
-  lastTouchTime = Date.now(); // record touch
+  lastTouchTime = Date.now();
   const touch = e.touches[0];
-  isDragging = true;
-  startX = touch.clientX;
-  startY = touch.clientY;
-  tempOffsetX = 0;
-  tempOffsetY = 0;
-  sky.classList.add('dragging');
-  e.preventDefault(); // VERY IMPORTANT
-  e.stopPropagation(); // prevent mouse events
+  startDrag(touch.clientX, touch.clientY);
+  e.preventDefault();
 }, { passive: false });
 
 window.addEventListener('touchmove', e => {
   if (!isDragging || e.touches.length !== 1) return;
   const touch = e.touches[0];
-  tempOffsetX = touch.clientX - startX;
-  tempOffsetY = touch.clientY - startY;
-  applyOffset();
+  moveDrag(touch.clientX, touch.clientY);
   e.preventDefault();
 }, { passive: false });
 
 window.addEventListener('touchend', e => {
-  if (!isDragging) return;
-  isDragging = false;
-  sky.classList.remove('dragging');
-  commitDrag(tempOffsetX, tempOffsetY);
+  endDrag();
   e.preventDefault();
 }, { passive: false });
+
 
 // --- Service Worker registration ---
 if ("serviceWorker" in navigator) {
