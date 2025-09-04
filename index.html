@@ -670,7 +670,6 @@ loadSky();
 
 // --- Live panning that locks RA/Dec ---
 let isDragging = false;
-let isTouching = false; // NEW
 let startX = 0, startY = 0;
 let currentOffsetX = 0, currentOffsetY = 0;
 let tempOffsetX = 0, tempOffsetY = 0;
@@ -736,7 +735,6 @@ function commitDrag(dx, dy) {
 
 // --- Mouse events ---
 viewer.addEventListener('mousedown', e => {
-  if (isTouching) return; // ignore mouse events triggered by touch
   isDragging = true;
   startX = e.clientX;
   startY = e.clientY;
@@ -746,14 +744,14 @@ viewer.addEventListener('mousedown', e => {
 });
 
 window.addEventListener('mousemove', e => {
-  if (!isDragging || isTouching) return; // ignore if touch active
+  if (!isDragging) return;
   tempOffsetX = e.clientX - startX;
   tempOffsetY = e.clientY - startY;
   applyOffset();
 });
 
 window.addEventListener('mouseup', e => {
-  if (!isDragging || isTouching) return;
+  if (!isDragging) return;
   isDragging = false;
   sky.classList.remove('dragging');
   commitDrag(tempOffsetX, tempOffsetY);
@@ -762,7 +760,6 @@ window.addEventListener('mouseup', e => {
 // --- Touch events ---
 viewer.addEventListener('touchstart', e => {
   if (e.touches.length !== 1) return;
-  isTouching = true; // NEW
   const touch = e.touches[0];
   isDragging = true;
   startX = touch.clientX;
@@ -785,17 +782,7 @@ window.addEventListener('touchmove', e => {
 window.addEventListener('touchend', e => {
   if (!isDragging) return;
   isDragging = false;
-  isTouching = false; // NEW
   sky.classList.remove('dragging');
   commitDrag(tempOffsetX, tempOffsetY);
   e.preventDefault();
-}, { passive: false });
-// --- Service Worker registration ---
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js")
-    .then(reg => console.log("Service worker registered", reg.scope))
-    .catch(err => console.error("SW registration failed", err));
-}
-  </script>
-</body>
-</html>
+}, { pass
