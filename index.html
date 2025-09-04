@@ -670,10 +670,16 @@ loadSky();
 
 // --- Live panning that locks RA/Dec ---
 let isDragging = false;
+let lastTouchTime = 0; // timestamp of last touch
 let startX = 0, startY = 0;
 let currentOffsetX = 0, currentOffsetY = 0;
 let tempOffsetX = 0, tempOffsetY = 0;
 
+// --- Helper to commit drag ---
+function commitDrag(dx, dy) {
+  // your existing code to convert dx/dy to RA/Dec
+  // ... (same as before)
+}
 function applyOffset() {
   const totalX = currentOffsetX + tempOffsetX;
   const totalY = currentOffsetY + tempOffsetY;
@@ -735,6 +741,7 @@ function commitDrag(dx, dy) {
 
 // --- Mouse events ---
 viewer.addEventListener('mousedown', e => {
+  if (Date.now() - lastTouchTime < 500) return; // ignore if touch was recent
   isDragging = true;
   startX = e.clientX;
   startY = e.clientY;
@@ -760,6 +767,7 @@ window.addEventListener('mouseup', e => {
 // --- Touch events ---
 viewer.addEventListener('touchstart', e => {
   if (e.touches.length !== 1) return;
+  lastTouchTime = Date.now(); // record touch
   const touch = e.touches[0];
   isDragging = true;
   startX = touch.clientX;
@@ -767,8 +775,9 @@ viewer.addEventListener('touchstart', e => {
   tempOffsetX = 0;
   tempOffsetY = 0;
   sky.classList.add('dragging');
-  e.preventDefault();
-});
+  e.preventDefault(); // VERY IMPORTANT
+  e.stopPropagation(); // prevent mouse events
+}, { passive: false });
 
 window.addEventListener('touchmove', e => {
   if (!isDragging || e.touches.length !== 1) return;
@@ -785,4 +794,14 @@ window.addEventListener('touchend', e => {
   sky.classList.remove('dragging');
   commitDrag(tempOffsetX, tempOffsetY);
   e.preventDefault();
-}, { pass
+}, { passive: false });
+
+// --- Service Worker registration ---
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js")
+    .then(reg => console.log("Service worker registered", reg.scope))
+    .catch(err => console.error("SW registration failed", err));
+}
+  </script>
+</body>
+</html>
