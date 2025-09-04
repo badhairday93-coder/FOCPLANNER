@@ -673,7 +673,7 @@ let isDragging = false;
 let startX = 0, startY = 0;
 let currentOffsetX = 0, currentOffsetY = 0;
 let tempOffsetX = 0, tempOffsetY = 0;
-let lastTouchTime = 0; // for ignoring mouse after touch
+let lastTouchTime = 0;
 
 function applyOffset() {
   const totalX = currentOffsetX + tempOffsetX;
@@ -700,7 +700,6 @@ function commitDrag(dx, dy) {
   raDeg = (raDeg + dRAdeg + 360) % 360;
   decDeg = Math.max(-90, Math.min(90, decDeg + dDecDeg));
 
-  // Update RA/Dec inputs
   const raHours = raDeg / 15;
   raH.value = Math.floor(raHours);
   raM.value = Math.floor((raHours % 1) * 60);
@@ -734,7 +733,7 @@ function commitDrag(dx, dy) {
   newImg.src = newSkyURL;
 }
 
-// --- Unified start/move/end functions ---
+// --- Unified handlers ---
 function startDrag(x, y) {
   isDragging = true;
   startX = x;
@@ -760,14 +759,14 @@ function endDrag() {
 
 // --- Mouse Events ---
 viewer.addEventListener('mousedown', e => {
-  if (Date.now() - lastTouchTime < 500) return; // ignore mouse after recent touch
+  if (Date.now() - lastTouchTime < 500) return; // ignore mouse after touch
   startDrag(e.clientX, e.clientY);
 });
 
 window.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
 window.addEventListener('mouseup', endDrag);
 
-// --- Touch Events ---
+// --- Touch Events (behaves exactly like mouse) ---
 viewer.addEventListener('touchstart', e => {
   if (e.touches.length !== 1) return;
   lastTouchTime = Date.now();
@@ -787,6 +786,7 @@ window.addEventListener('touchend', e => {
   endDrag();
   e.preventDefault();
 }, { passive: false });
+
 
 
 // --- Service Worker registration ---
