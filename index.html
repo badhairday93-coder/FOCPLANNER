@@ -740,9 +740,7 @@ viewer.addEventListener('touchmove', e => {
 
 viewer.addEventListener('touchend', e => {
   if (!isDragging) return;
-  isDragging = false;
-  sky.classList.remove('dragging');
-  commitDrag(tempOffsetX, tempOffsetY);
+  endDrag(tempOffsetX, tempOffsetY);
 
   tempOffsetX = 0;
   tempOffsetY = 0;
