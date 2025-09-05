@@ -712,7 +712,7 @@ window.addEventListener('mouseup', e => {
 });
 
 // --- Touch events ---
-// --- Touch events (no page scroll inside viewer) ---
+// --- Touch events (match desktop drag behavior) ---
 viewer.addEventListener('touchstart', e => {
   if (e.touches.length !== 1) return; // ignore multi-touch
   isDragging = true;
@@ -723,7 +723,7 @@ viewer.addEventListener('touchstart', e => {
   tempOffsetY = 0;
   sky.classList.add('dragging');
 
-  // stop page scrolling as soon as we start a drag inside the viewer
+  // prevent page scroll while panning
   if (e.cancelable) e.preventDefault();
 }, { passive: false });
 
@@ -735,17 +735,20 @@ viewer.addEventListener('touchmove', e => {
   tempOffsetY = t.clientY - startY;
   applyOffset();
 
-  // keep the page from scrolling while panning the sky
   if (e.cancelable) e.preventDefault();
 }, { passive: false });
 
-// end the drag even if the finger lifts outside the viewer
-window.addEventListener('touchend', e => {
+viewer.addEventListener('touchend', e => {
   if (!isDragging) return;
-  endDrag(tempOffsetX, tempOffsetY);
+  isDragging = false;
+  sky.classList.remove('dragging');
+  commitDrag(tempOffsetX, tempOffsetY);
+
+  tempOffsetX = 0;
+  tempOffsetY = 0;
 }, { passive: true });
 
-window.addEventListener('touchcancel', () => {
+viewer.addEventListener('touchcancel', () => {
   if (!isDragging) return;
   isDragging = false;
   sky.classList.remove('dragging');
