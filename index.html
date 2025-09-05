@@ -47,6 +47,9 @@
     #guideOverlay{border-color:var(--green)}
     #spinner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;color:white;font-size:14px}
     #readout{font-size:12px;color:#cbd5e1;border-top:1px solid #1f2937;margin-top:8px;padding-top:6px}
+/* Disable page scroll/pinch while touching inside the viewer only */
+#viewer, #sky { touch-action: none; }
+
   </style>
 </head>
 <body>
@@ -709,28 +712,45 @@ window.addEventListener('mouseup', e => {
 });
 
 // --- Touch events ---
+// --- Touch events (no page scroll inside viewer) ---
 viewer.addEventListener('touchstart', e => {
   if (e.touches.length !== 1) return; // ignore multi-touch
   isDragging = true;
-  startX = e.touches[0].clientX;
-  startY = e.touches[0].clientY;
+  const t = e.touches[0];
+  startX = t.clientX;
+  startY = t.clientY;
   tempOffsetX = 0;
   tempOffsetY = 0;
   sky.classList.add('dragging');
-});
 
-window.addEventListener('touchmove', e => {
+  // stop page scrolling as soon as we start a drag inside the viewer
+  if (e.cancelable) e.preventDefault();
+}, { passive: false });
+
+viewer.addEventListener('touchmove', e => {
   if (!isDragging || e.touches.length !== 1) return;
-  e.preventDefault(); // prevent page scroll while dragging
-  tempOffsetX = e.touches[0].clientX - startX;
-  tempOffsetY = e.touches[0].clientY - startY;
-  applyOffset();
-}, { passive: false }); // passive: false is required
 
+  const t = e.touches[0];
+  tempOffsetX = t.clientX - startX;
+  tempOffsetY = t.clientY - startY;
+  applyOffset();
+
+  // keep the page from scrolling while panning the sky
+  if (e.cancelable) e.preventDefault();
+}, { passive: false });
+
+// end the drag even if the finger lifts outside the viewer
 window.addEventListener('touchend', e => {
   if (!isDragging) return;
   endDrag(tempOffsetX, tempOffsetY);
-});
+}, { passive: true });
+
+window.addEventListener('touchcancel', () => {
+  if (!isDragging) return;
+  isDragging = false;
+  sky.classList.remove('dragging');
+  tempOffsetX = tempOffsetY = 0;
+}, { passive: true });
 
 // --- Shared drag-end logic ---
 function endDrag(dx, dy) {
